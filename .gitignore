@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+uv.lock
+# experiment outputs / data
+*.pth
+*.npz
+*.npy
+data/
+runs/
