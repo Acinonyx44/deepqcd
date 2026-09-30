@@ -13,6 +13,7 @@ the same streams and records the first threshold crossing for a whole grid of th
 which is what makes evaluating thousands of streams take minutes instead of the notebooks' days.
 """
 import copy
+import os
 import time
 
 import numpy as np
@@ -64,6 +65,23 @@ def train(net, x, y, xv, yv, epochs=20, batch=32, patience=3, lr=1e-3):
     net.load_state_dict(best_state)
     net.eval()
     return best
+
+
+def load_or_train(path, net, make_data, retrain=False, **kw):
+    """Train the network (Alg. 1) and cache its weights, or reload them if they are already there.
+    `make_data()` returns (x, y, xv, yv) and is only called when training actually happens, so a cached
+    run skips generating the training streams too. Note that training consumes the global RNG while a
+    cache hit does not: re-seed after this call if you need the evaluation to match either way."""
+    if not retrain and os.path.exists(path):
+        net.load_state_dict(torch.load(path, weights_only=True))
+        net.eval()
+        print(f'  loaded weights from {path}')
+        return net
+    train(net, *make_data(), **kw)
+    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+    torch.save(net.state_dict(), path)
+    print(f'  saved weights to {path}')
+    return net
 
 
 def check_causality(net, x):

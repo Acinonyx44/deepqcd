@@ -128,3 +128,53 @@ Reading:
   is why its grid had to be cut at 8.
 - Where the mismatch bites is the *Bayesian* posterior: the misspecified IID Shiryaev is unusable at low PFA,
   whereas the model-free network gets within 3-7 % ([r, r^2]) of the GARCH-aware posterior.
+
+## Detection reports at a calibrated threshold (`detect.py`)
+
+The scripts above sweep the threshold, as the paper does. `detect.py` instead fixes a false-alarm budget,
+calibrates every detector to it on no-change streams, and then measures what they do on 2000 fresh streams
+whose change is at t = 500. Budget: one false alarm per ~1000 steps. `early` is the fraction that alarmed
+before the change, `ADD` the mean delay among the rest.
+
+| source | detector | h | measured FAP | early | ADD | median | p90 |
+|---|---|---|---|---|---|---|---|
+| IID | DeepQCD | 0.217 | 810 | 55.0 % | 1.2 | 1 | 2 |
+| IID | Shiryaev | 0.217 | 1113 | 35.2 % | 1.2 | 1 | 3 |
+| IID | CUSUM | 5.22 | 949 | 40.9 % | 1.2 | 1 | 3 |
+| IID | Shiryaev-Roberts | 236 | 959 | 39.1 % | 1.2 | 1 | 2 |
+| AR(1) | DeepQCD | 0.380 | 1247 | 40.1 % | 4.6 | 4 | 9 |
+| AR(1) | mod. Shiryaev | 0.217 | 802 | 45.8 % | 4.2 | 3 | 9 |
+| AR(1) | mod. CUSUM | 4.81 | 1109 | 36.4 % | 4.4 | 4 | 9 |
+| AR(1) | mod. Shiryaev-Roberts | 310 | 897 | 42.3 % | 4.2 | 3 | 9 |
+| GARCH | DeepQCD | 0.380 | 910 | 46.4 % | 27.8 | 25 | 47 |
+| GARCH | GARCH Shiryaev | 0.380 | 1088 | 35.4 % | 27.1 | 24 | 48 |
+| GARCH | IID Shiryaev | 0.808 | 947 | 39.6 % | 26.6 | 24 | 46 |
+| GARCH | GARCH CUSUM | 4.38 | 1056 | 37.6 % | 28.1 | 24 | 51 |
+| GARCH | IID CUSUM | 6.90 | 1027 | 37.6 % | 26.6 | 24 | 47 |
+| GARCH | rolling var (20d) | 2.54 | 1014 | 36.6 % | 28.7 | 25 | 48 |
+
+At matched FAP the delays are all within noise of each other, which is the same conclusion the swept curves
+reach once the change is placed late. Note how large `early` is: with a mean false-alarm period of 1000 and
+a change at 500, roughly 40 % of streams cry wolf first. That is not a bug, it is what "one false alarm per
+1000 steps" means, and it is the number that a tradeoff curve hides.
+
+### DeepQCD's false alarms are front-loaded
+
+For a memoryless detector the time to a false alarm is close to exponential, so `P(false alarm before 500)`
+should be `1 - exp(-500 / FAP)`. Comparing that prediction with what actually happened:
+
+| source | detector | early observed | exponential prediction | ratio |
+|---|---|---|---|---|
+| IID | DeepQCD | 55.0 % | 46.1 % | **1.19** |
+| IID | Shiryaev / CUSUM / SR | 35-41 % | 36-41 % | 0.96-1.00 |
+| AR(1) | DeepQCD | 40.1 % | 33.0 % | **1.21** |
+| AR(1) | mod. Shiryaev / CUSUM / SR | 36-46 % | 36-46 % | 0.99-1.00 |
+| GARCH | DeepQCD | 46.4 % | 42.3 % | **1.10** |
+| GARCH | the four model-based rules | 37-40 % | 38-41 % | 0.94-1.00 |
+
+Every model-based detector is within a few percent of exponential; DeepQCD raises 10-21 % more early false
+alarms than its own FAP implies, in all three models. This is the start-up sensitivity of the recurrent
+state showing up in a completely different statistic from the tau = 1 artifact above, and it has a practical
+consequence: **for DeepQCD, FAP alone understates the risk of an early alarm**, because FAP is a mean over a
+distribution whose mass is pushed toward the beginning. Calibrate a recurrent detector on the false-alarm
+probability over the horizon you actually care about, not on the mean false-alarm period.

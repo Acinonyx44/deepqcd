@@ -19,12 +19,17 @@ original/             the authors' code, untouched, one folder per paper section
 qcd.py                shared machinery: DeepQCD net, training loop (Alg. 1), classical detectors written as the
                       generic QCD procedure (CUSUM, Shiryaev, SR, window-limited CUSUM), vectorized stopping-time
                       simulation over many streams x many thresholds
+sources.py            the observation models (IID, AR(1), GARCH), each bundled with the model-based detectors
+                      that know it; shared by the experiment scripts and detect.py
+detect.py             run one experiment end to end: pick a source and a change time, train or reload the
+                      detector, calibrate every threshold to the same false-alarm budget, report the delays
 deepqcd_iid.py        Sec. 5.1  IID Gaussian:  DeepQCD vs Shiryaev (Bayesian) and vs CUSUM / SR (minimax)
 deepqcd_ar.py         Sec. 5.2  AR(1):         DeepQCD vs the "modified" Shiryaev / CUSUM / SR of Eq. (10)
 deepqcd_transient.py  Sec. 5.3  transient:     DeepQCD vs window-limited CUSUM, PD vs PFA
 deepqcd_vol.py        ours:     volatility-regime change in GARCH(1,1) returns: DeepQCD vs GARCH-aware and
                       misspecified-IID CUSUM / Shiryaev and a rolling-variance rule (--sq feeds [r, r^2])
 notes/results.md      the numbers from all full runs, what reproduces, what does not, and why
+notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
 figures/              output figures (tracked); runs/ holds logs (git-ignored)
 ```
@@ -44,6 +49,22 @@ uv sync --group notebooks    # + JupyterLab, if you want to open original/Sec. 5
 .venv/bin/python deepqcd_ar.py                #                        -> figures/ar.png
 .venv/bin/python deepqcd_transient.py         #                        -> figures/transient.png
 .venv/bin/python deepqcd_vol.py [--sq]        # ~15 min                -> figures/vol[_sq].png
+```
+
+Those four reproduce the paper's figures: they sweep the threshold and plot a tradeoff curve, as the paper does.
+To instead run a single detection experiment and see what the detector actually did — one source, one change
+time, one calibrated threshold, and the resulting delays — use the driver:
+
+```bash
+.venv/bin/python detect.py --source garch --tau 500 --fap 1000
+.venv/bin/python detect.py --source ar --tau 500 --trials 5000     # sources: iid, ar, garch, garch-sq
+```
+
+It trains once and caches the weights in `runs/models/`, so later runs start at the calibration step.
+`notes/workflow.md` walks through what each phase does and where it lives in the code.
+
+```bash
+runs/regen.sh                                 # regenerate every number in notes/results.md, ~45 min
 ```
 
 Every experiment script takes `--quick` (tiny dataset, 2 epochs, 10x fewer test streams) for a ~10 s smoke test;

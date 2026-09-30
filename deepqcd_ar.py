@@ -27,16 +27,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+import sources
 from qcd import (DeepQCD, NetDetector, Recursive, interp_at, bayes_metrics, cadd, check_causality, cusum,
                  decision_statistics, shiryaev, shiryaev_roberts, stopping_times, train)
 
 QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few streams
 Q = 10 if QUICK else 1
 
-# ---- problem ----
-MU0, LAM0 = 0.0, -0.3   # pre-change drift and AR coefficient
-MU1, LAM1 = 1.0, 0.2    # post-change
-RHO = 0.001             # geometric prior of the change-point
+# ---- problem (defined in sources.py, shared with detect.py) ----
+SRC = sources.AR(mu0=0.0, lam0=-0.3, mu1=1.0, lam1=0.2)
+MU0, LAM0, MU1, LAM1, RHO = SRC.mu0, SRC.lam0, SRC.mu1, SRC.lam1, SRC.rho
+ARSampler, sample, llr = SRC.sampler, SRC.training_set, SRC.llr
 
 # ---- training (as in the notebook) ----
 N_TRAIN, N_VAL, T_TRAIN = 3200 // Q, 500 // Q, 2000
@@ -51,39 +52,6 @@ TAU_LATE = 200          # extra (not in the paper): change after the detectors h
 
 np.random.seed(0)
 torch.manual_seed(0)
-
-
-class ARSampler:
-    """Generates the AR(1) streams of n change-points tau chunk by chunk, carrying x_{t-1} across chunks.
-    Call with consecutive time ranges: sample(t0, L) -> x_{t0+1..t0+L}, shape (n, L, 1)."""
-
-    def __init__(self, n, tau):
-        self.tau = np.asarray(tau, dtype=float)
-        self.x_prev = np.zeros(n)  # x_0 = 0
-
-    def __call__(self, t0, L):
-        x = np.empty((len(self.x_prev), L))
-        for i in range(L):
-            post = t0 + i + 1 >= self.tau
-            mu, lam = np.where(post, MU1, MU0), np.where(post, LAM1, LAM0)
-            self.x_prev = mu + lam * self.x_prev + np.random.randn(len(self.x_prev))
-            x[:, i] = self.x_prev
-        return x[..., None].astype(np.float32)
-
-
-def sample(n, T, tau):
-    """Full streams x_1..x_T (n, T, 1) with labels 1{t >= tau} (n, T), for training."""
-    x = ARSampler(n, tau)(0, T)
-    y = (np.arange(1, T + 1)[None, :] >= np.asarray(tau)[:, None]).astype(np.float32)
-    return x, y
-
-
-def llr(x, x_prev):
-    """Eq. (10): log of the conditional LR f1(x_t | x_{t-1}) / f0(x_t | x_{t-1}); both are Gaussian with unit
-    variance and means MU1 + LAM1 x_{t-1} vs MU0 + LAM0 x_{t-1}."""
-    x = x[..., 0]
-    xp = np.concatenate([x_prev, x[:, :-1]], axis=1)  # x_{t-1} for every t in the chunk
-    return (x - 0.5 * (xp * (LAM0 + LAM1) + MU0 + MU1)) * (xp * (LAM1 - LAM0) + MU1 - MU0)
 
 
 def main():

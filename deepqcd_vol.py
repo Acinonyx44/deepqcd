@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+import sources
 from qcd import (DeepQCD, NetDetector, Recursive, bayes_metrics, cadd, check_causality, cusum, decision_statistics,
                  interp_at, shiryaev, stopping_times, train)
 
@@ -40,12 +41,12 @@ QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few 
 SQ = '--sq' in sys.argv        # feature transformation: feed [r_t, r_t^2] instead of r_t alone
 Q = 10 if QUICK else 1
 
-# ---- problem ----
-ALPHA, BETA = 0.05, 0.90        # GARCH(1,1): persistence 0.95, typical for daily equity index returns
-VOL1 = 2.0                      # turbulent-regime unconditional vol (calm regime = 1)
-OMEGA = np.array([1.0, VOL1 ** 2]) * (1 - ALPHA - BETA)  # long-run variance = OMEGA / (1 - ALPHA - BETA)
-RHO = 0.001                     # geometric prior of the change-point (mean 1000 days = 4 years)
-K_ROLL = 20                     # window of the rolling-variance rule (one trading month)
+# ---- problem (defined in sources.py, shared with detect.py) ----
+SRC = sources.GARCH(alpha=0.05, beta=0.90, vol1=2.0, sq=SQ, k_roll=20)
+RHO, K_ROLL = SRC.rho, SRC.k_roll
+GARCHSampler, sample, llr_iid = SRC.sampler, SRC.training_set, SRC.llr_iid
+RollingVariance = sources.RollingVariance
+GARCHLLR = lambda: sources.GARCHLLR(SRC)          # noqa: E731  (stateful: one instance per detector)
 
 # ---- training (as in the paper's Sec. 5) ----
 N_TRAIN, N_VAL, T_TRAIN = 3200 // Q, 500 // Q, 2000
@@ -60,79 +61,6 @@ TAU_LATE = 200                  # late change: detectors and the GARCH variance 
 
 np.random.seed(0)
 torch.manual_seed(0)
-
-
-class GARCHSampler:
-    """Generates the GARCH streams of n change-points tau chunk by chunk, carrying (r_{t-1}, sigma_{t-1}^2) across
-    chunks. Call with consecutive time ranges: sample(t0, L) -> observations x_{t0+1..t0+L}, shape (n, L, P)."""
-
-    def __init__(self, n, tau):
-        self.tau = np.asarray(tau, dtype=float)
-        self.r_prev = np.zeros(n)
-        self.sig2 = np.ones(n)  # start at the calm regime's unconditional variance
-
-    def __call__(self, t0, L):
-        r = np.empty((len(self.r_prev), L))
-        for i in range(L):
-            omega = np.where(t0 + i + 1 >= self.tau, OMEGA[1], OMEGA[0])
-            self.sig2 = omega + ALPHA * self.r_prev ** 2 + BETA * self.sig2
-            self.r_prev = np.sqrt(self.sig2) * np.random.randn(len(self.r_prev))
-            r[:, i] = self.r_prev
-        return features(r)
-
-
-def features(r):
-    """Feature transformation (paper Sec. 4.1): raw returns, or returns and squared returns."""
-    f = np.stack([r, r ** 2], axis=-1) if SQ else r[..., None]
-    return f.astype(np.float32)
-
-
-def sample(n, T, tau):
-    """Full streams (n, T, P) with labels 1{t >= tau} (n, T), for training."""
-    x = GARCHSampler(n, tau)(0, T)
-    y = (np.arange(1, T + 1)[None, :] >= np.asarray(tau)[:, None]).astype(np.float32)
-    return x, y
-
-
-def llr_iid(x, x_prev):
-    """log N(r; 0, VOL1^2) / N(r; 0, 1): the IID model with the right unconditional vols (wrong dynamics)."""
-    return 0.5 * x[..., 0] ** 2 * (1 - 1 / VOL1 ** 2) - np.log(VOL1)
-
-
-class GARCHLLR:
-    """log N(r_t; 0, sigma_{1,t}^2) / N(r_t; 0, sigma_{0,t}^2), where sigma_{i,t}^2 follows regime i's recursion
-    from t = 1, driven by the observed returns. Stateful: keeps both variances across chunks."""
-
-    def reset(self, n):
-        self.sig2 = np.ones((2, n))
-
-    def __call__(self, x, x_prev):
-        r, out = x[..., 0], np.empty(x.shape[:2])
-        r_prev = x_prev[:, 0]
-        for t in range(r.shape[1]):
-            self.sig2 = OMEGA[:, None] + ALPHA * r_prev ** 2 + BETA * self.sig2
-            s0, s1 = self.sig2
-            out[:, t] = 0.5 * r[:, t] ** 2 * (1 / s0 - 1 / s1) + 0.5 * np.log(s0 / s1)
-            r_prev = r[:, t]
-        return out
-
-
-class RollingVariance:
-    """d_t = mean of r^2 over the last K returns (fewer at the start). Window-limited, model-free."""
-
-    def __init__(self, K, h):
-        self.K, self.h = K, h
-
-    def reset(self, n):
-        self.tail = np.zeros((n, self.K - 1))
-
-    def __call__(self, x):
-        r2 = x[..., 0].astype(np.float64) ** 2
-        ext = np.concatenate([self.tail, r2], axis=1)
-        S = np.concatenate([np.zeros((len(r2), 1)), np.cumsum(ext, axis=1)], axis=1)
-        end = np.arange(self.K, self.K + r2.shape[1])
-        self.tail = ext[:, ext.shape[1] - (self.K - 1):]
-        return (S[:, end] - S[:, end - self.K]) / self.K
 
 
 def main():

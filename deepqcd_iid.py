@@ -23,16 +23,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+import sources
 from qcd import (DeepQCD, NetDetector, Recursive, interp_at, bayes_metrics, cadd, check_causality, cusum,
                  decision_statistics, shiryaev, shiryaev_roberts, stopping_times, train)
 
 QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few streams
 Q = 10 if QUICK else 1
 
-# ---- problem ----
-P = 7                   # data dimension
-MU1 = np.ones(P)        # post-change mean (pre-change mean is 0)
-RHO = 0.001             # geometric prior of the change-point
+# ---- problem (defined in sources.py, shared with detect.py) ----
+SRC = sources.IID(p=7)
+P, RHO = SRC.input_dim, SRC.rho
+sample, sampler, llr = SRC.observations, SRC.sampler, SRC.llr
 
 # ---- training (as in the notebooks) ----
 N_TRAIN, N_VAL, T_TRAIN = 3200 // Q, 500 // Q, 2000
@@ -47,23 +48,6 @@ TAU_LATE = 200          # extra (not in the paper): change after the detectors h
 
 np.random.seed(0)
 torch.manual_seed(0)
-
-
-def sample(n, t, tau):
-    """Observations at (1-indexed) times t for n streams: x_t ~ f1 if t >= tau else f0. Also returns the labels."""
-    post = t[None, :] >= tau[:, None]
-    x = np.random.randn(n, len(t), P) + post[..., None] * MU1
-    return x.astype(np.float32), post.astype(np.float32)
-
-
-def sampler(n, tau):
-    """Chunked stream generator for stopping_times: x_{t0+1..t0+L} of n streams with change-points tau."""
-    return lambda t0, L: sample(n, np.arange(t0 + 1, t0 + L + 1), tau)[0]
-
-
-def llr(x, x_prev):
-    """log f1(x) / f0(x) for N(MU1, I) vs N(0, I); IID, so x_prev is unused."""
-    return x @ MU1 - MU1 @ MU1 / 2
 
 
 def main():
