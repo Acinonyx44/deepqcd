@@ -30,6 +30,9 @@ deepqcd_vol.py        ours:     volatility-regime change in GARCH(1,1) returns: 
                       misspecified-IID CUSUM / Shiryaev and a rolling-variance rule (--sq feeds [r, r^2])
 notes/results.md      the numbers from all full runs, what reproduces, what does not, and why
 notes/datasets.md     real datasets (mostly on GitHub) that fit the recipe, how to turn each into QCD streams, pitfalls
+realdata.py           loaders reducing 15 real datasets to change episodes (fetch them with fetch_data.sh)
+deepqcd_real.py       DeepQCD vs fitted-Gaussian CUSUM and MEWMA on all of them at matched PFA -> figures/real.png
+notes/realdata.md     the real-data scorecard: where DeepQCD wins (3), ties (3) and loses (9), and why
 notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
 regen.sh              reruns every experiment, logging to runs/
@@ -68,6 +71,15 @@ so later runs with the same settings start at the calibration step.
 
 ```bash
 ./regen.sh                                    # regenerate every number in notes/results.md, ~45 min
+```
+
+Real data (all hosted on GitHub, ~1.1 GB into `data/`):
+
+```bash
+./fetch_data.sh
+uv sync --group realdata                      # scipy, for the .mat files
+.venv/bin/python deepqcd_real.py              # ~25 min on 4 CPUs -> figures/real.png, runs/real/
+.venv/bin/python deepqcd_real.py skab tep     # a subset; --report rebuilds the table from runs/real/
 ```
 
 Every experiment script takes `--quick` (tiny dataset, 2 epochs, 10x fewer test streams) for a ~10 s smoke test;

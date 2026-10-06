@@ -21,6 +21,9 @@ run ar        deepqcd_ar.py
 run transient deepqcd_transient.py
 run vol       deepqcd_vol.py
 run vol_sq    deepqcd_vol.py --sq
+if [ -d data/SKAB ]; then  # real datasets: ./fetch_data.sh first
+    run real deepqcd_real.py
+fi
 for src in iid ar garch; do
     run "detect_${src}_tau500" detect.py --source "$src" --tau 500 --fap 1000 "$@"
 done

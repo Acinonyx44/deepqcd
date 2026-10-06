@@ -49,6 +49,7 @@ N_TRAIN = 200 if QUICK else 2000
 N_TEST = 100 if QUICK else 600
 EPOCHS = 2 if QUICK else 20
 LEVELS = (0.05, 0.1, 0.25)
+PFA_FLOOR = 1e-3  # where PFA = 0 is drawn on the log axis (1/N_TEST < 2e-3)
 
 
 # ---------------------------------------------------------------- windows
@@ -253,13 +254,15 @@ def plot(figs, path):
     colors = {'CUSUM (fitted Gaussians)': 'C1', 'MEWMA chart': 'C2'}
     for ax, (res, curves) in zip(axes.flat, figs):
         for k, (pfa, add, dr) in curves.items():
-            o = np.argsort(pfa)
+            # threshold order (PFA falls, ADD rises), drawn as the achievable frontier: for any budget between
+            # two operating points the next stricter one applies. PFA = 0 sits at the floor so it stays visible.
             deep = k.startswith('DeepQCD')
-            ax.plot(pfa[o], add[o], color='C0' if deep else colors[k], lw=1 if deep else 1.8, alpha=0.7 if deep else 1,
-                    label=('DeepQCD (3 seeds)' if k.endswith('#0') else None) if deep else k)
+            ax.plot(np.maximum(pfa, PFA_FLOOR), add, drawstyle='steps-pre', color='C0' if deep else colors[k],
+                    lw=1 if deep else 1.8,
+                    alpha=0.7 if deep else 1, label=('DeepQCD (3 seeds)' if k.endswith('#0') else None) if deep else k)
         ax.set_xscale('log')
-        ax.set_xlim(0.01, 1)
-        ax.invert_xaxis()
+        ax.set_xlim(1, PFA_FLOOR)
+        ax.set_xticks([1, 0.1, 0.01, PFA_FLOOR], ['1', '0.1', '0.01', '0'])
         ax.set_title(res['label'], fontsize=9)
         ax.set_xlabel('PFA (alarm before the change)')
         ax.set_ylabel(f'ADD, misses = horizon ({res["unit"]})')

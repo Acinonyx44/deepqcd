@@ -1,5 +1,7 @@
 # Real datasets for DeepQCD
 
+*Results of running DeepQCD on the 15 reachable ones: `notes/realdata.md`.*
+
 A survey of public datasets (mostly on GitHub) that fit our setup: streams that start in a normal regime and
 switch to an abnormal one at a time we know, so we can label every step 0 or 1 for training and measure
 detection delay and false alarms when testing. Compiled 2026-10-06. "Reachable here" means the
