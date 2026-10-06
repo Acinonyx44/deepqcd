@@ -5,6 +5,7 @@ classical detectors.
     .venv/bin/python deepqcd_real.py                 # all datasets, ~1 h on 4 CPUs
     .venv/bin/python deepqcd_real.py skab tep        # a subset
     .venv/bin/python deepqcd_real.py --quick         # smoke test
+    .venv/bin/python deepqcd_real.py --report        # table + figures/real.png from the saved runs/real/
 
 Protocol, per dataset:
 
@@ -26,8 +27,9 @@ Protocol, per dataset:
               ADD      mean delay over the windows that did not false-alarm, a window that never alarms
                        counting its full post-change length (so misses are penalized, not dropped)
               DR       fraction of those windows that alarm within the horizon
-            and report ADD and DR at PFA = 0.05, 0.1, 0.25 (interpolated), i.e. at a matched false-alarm
-            level, never at a matched threshold.
+            and report ADD and DR at the operating point for PFA <= 0.05, 0.1, 0.25 (the lowest threshold
+            meeting the budget), i.e. at a matched false-alarm level, never at a matched threshold.
+            The full curves are saved to runs/real/<name>.npz.
 """
 import json
 import os
@@ -147,12 +149,15 @@ def tradeoff(dstat, tau, length):
     return early.mean(0), np.where(ok, delay, 0).sum(0) / cnt, det.sum(0) / cnt
 
 
-def at_level(pfa, val, level):
-    ok = (pfa > 0) & (pfa < 1)
-    if not ok.any() or level < pfa[ok].min() or level > pfa[ok].max():
+def at_level(pfa, val, level, add):
+    """The operating point for a false-alarm budget: the lowest threshold with PFA <= level (the one with the
+    smallest delay). Read off the step curve rather than interpolated, because some detectors jump from
+    PFA 1 straight to 0 (e.g. a CUSUM whose pre-change LLR is strongly negative never false-alarms)."""
+    ok = pfa <= level
+    if not ok.any():
         return np.nan
-    o = np.argsort(pfa[ok])
-    return float(np.interp(np.log(level), np.log(pfa[ok][o]), val[ok][o]))
+    i = np.flatnonzero(ok)[np.argmin(add[ok])]
+    return float(val[i])
 
 
 # ---------------------------------------------------------------- one dataset
@@ -205,7 +210,8 @@ def run(name):
     res = {'name': name, 'label': d.label, 'unit': d.unit, 'P': P, 'n_train_eps': len(d.train),
            'n_test_eps': len(d.test), 'H': d.H, 'notes': d.notes, 'detectors': {}}
     for k, (pfa, add, dr) in curves.items():
-        res['detectors'][k] = {f'{lv}': {'ADD': at_level(pfa, add, lv), 'DR': at_level(pfa, dr, lv)} for lv in LEVELS}
+        res['detectors'][k] = {f'{lv}': {'ADD': at_level(pfa, add, lv, add), 'DR': at_level(pfa, dr, lv, add)}
+                               for lv in LEVELS}
     print_table(res)
     print(f'  ({time.time() - t0:.0f}s)')
     return res, curves
@@ -240,18 +246,7 @@ def print_table(res):
         print(line)
 
 
-def main():
-    names = [a for a in sys.argv[1:] if not a.startswith('--')] or list(realdata.LOADERS)
-    os.makedirs(os.path.join('runs', 'real'), exist_ok=True)
-    out, figs = [], []
-    for n in names:
-        res, curves = run(n)
-        out.append(res)
-        figs.append((res, curves))
-        if not QUICK:
-            with open(os.path.join('runs', 'real', f'{n}.json'), 'w') as f:
-                json.dump(res, f, indent=1, default=float)
-
+def plot(figs, path):
     cols = min(4, len(figs))
     rows = int(np.ceil(len(figs) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.2 * cols, 3.4 * rows), squeeze=False)
@@ -266,16 +261,51 @@ def main():
         ax.set_xlim(0.01, 1)
         ax.invert_xaxis()
         ax.set_title(res['label'], fontsize=9)
-        ax.set_xlabel('PFA')
-        ax.set_ylabel(f'ADD ({res["unit"]})')
+        ax.set_xlabel('PFA (alarm before the change)')
+        ax.set_ylabel(f'ADD, misses = horizon ({res["unit"]})')
         ax.grid(alpha=0.3)
     for ax in list(axes.flat)[len(figs):]:
         ax.axis('off')
     axes.flat[0].legend(fontsize=7)
     fig.tight_layout()
-    path = figure_path('real.png' if len(names) == len(realdata.LOADERS) else f'real_{"_".join(names)}.png')
     fig.savefig(path, dpi=110)
     print(f'\nSaved {path}')
+
+
+def report():
+    """Rebuild the table and figures/real.png from the saved runs/real/<name>.{json,npz}."""
+    figs = []
+    for n in realdata.LOADERS:
+        p = os.path.join('runs', 'real', n)
+        if not os.path.exists(p + '.json'):
+            print(f'  (no saved run for {n})')
+            continue
+        res = json.load(open(p + '.json'))
+        z = np.load(p + '.npz')
+        curves = {k: tuple(z[f'{k}|{m}'] for m in ('pfa', 'add', 'dr')) for k in res['detectors']}
+        print(f'\n=== {res["label"]}  ({n})')
+        print_table(res)
+        figs.append((res, curves))
+    plot(figs, figure_path('real.png'))
+
+
+def main():
+    if '--report' in sys.argv:
+        return report()
+    names = [a for a in sys.argv[1:] if not a.startswith('--')] or list(realdata.LOADERS)
+    os.makedirs(os.path.join('runs', 'real'), exist_ok=True)
+    figs = []
+    for n in names:
+        res, curves = run(n)
+        figs.append((res, curves))
+        if not QUICK:
+            with open(os.path.join('runs', 'real', f'{n}.json'), 'w') as f:
+                json.dump(res, f, indent=1, default=float)
+            np.savez(os.path.join('runs', 'real', f'{n}.npz'),
+                     **{f'{k}|{m}': v for k, c in curves.items() for m, v in zip(('pfa', 'add', 'dr'), c)})
+    # a full run draws the tracked summary figure; a subset only a scratch one (rebuild with --report)
+    full = len(names) == len(realdata.LOADERS) and not QUICK
+    plot(figs, figure_path('real.png') if full else os.path.join('runs', 'real', f'real_{"_".join(names)}.png'))
 
 
 if __name__ == '__main__':

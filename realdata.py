@@ -112,17 +112,21 @@ def skab():
 
 
 def tep():
-    """Braatz TEP. Training: normal run d00 spliced onto each fault's training run (whose 480 samples are all
-    post-fault). Testing: the native test runs, fault at sample 160 of 960."""
-    load = lambda f: np.loadtxt(_path('tep', f + '.dat'))
-    d00 = load('d00').T  # stored transposed (52, 500)
+    """Braatz TEP. Training: each of the two normal runs (d00, 500 samples; d00_te, 960) spliced onto each
+    fault's training run (whose 480 samples are all post-fault). Testing: the native test runs, fault at
+    sample 160 of 960. With d00 alone the network memorizes that one run and reads the test runs' normal
+    stretch as abnormal (detection at PFA <= 0.1 fell from 70 % to 5 % in a check); d00_te is in no test
+    episode, so using it is fair, and the rivals get it too."""
+    load = lambda f: np.loadtxt(_path('tep', f + '.dat')).astype(np.float32)
+    normal = [load('d00').T, load('d00_te')]  # d00 is stored transposed (52, 500)
     tr, te = [], []
     for k in range(1, 22):
-        tr.append((np.concatenate([d00, load(f'd{k:02d}')]).astype(np.float32), len(d00)))
-        te.append((load(f'd{k:02d}_te').astype(np.float32), 160))
+        fault = load(f'd{k:02d}')
+        tr += [(np.concatenate([n, fault]), len(n)) for n in normal]
+        te.append((load(f'd{k:02d}_te'), 160))
     return RealData('tep', 'Tennessee Eastman (21 faults)', '3 min', tr, te, pmin=20, pmax=150, H=200,
-                    calm=[d00.astype(np.float32)],
-                    notes='train = spliced normal+fault runs, test = native runs (fault at 160); one model for all faults')
+                    calm=normal, notes='train = both normal runs spliced onto each fault run, test = native runs '
+                                       '(fault at 160); one model for all faults')
 
 
 def _close_gaps(lab, gap):
