@@ -38,24 +38,30 @@ class DeepQCD(nn.Module):
         return self.head(s).squeeze(-1), state
 
 
-def train(net, x, y, xv, yv, epochs=20, batch=32, patience=3, lr=1e-3):
+def train(net, x, y, xv, yv, epochs=20, batch=32, patience=3, lr=1e-3, w=None, wv=None):
     """Alg. 1: minimize the binary cross-entropy between d_t and the labels, early stopping on the
-    validation BCE. x: (N, T, P) float32 observations, y: (N, T) float32 labels in {0, 1}."""
+    validation BCE. x: (N, T, P) float32 observations, y: (N, T) float32 labels in {0, 1}.
+    Optional w, wv: (N, T) 0/1 masks for padded streams of unequal length (padding is not scored)."""
     x, y, xv, yv = map(torch.as_tensor, (x, y, xv, yv))
     opt = torch.optim.Adam(net.parameters(), lr=lr)
-    bce = nn.BCELoss()
+    if w is None:
+        bce = lambda d, t, m=None: nn.functional.binary_cross_entropy(d, t)
+        w, wv = torch.ones(len(x)), torch.ones(len(xv))  # placeholders so w[idx] works; ignored
+    else:
+        w, wv = torch.as_tensor(w), torch.as_tensor(wv)
+        bce = lambda d, t, m: nn.functional.binary_cross_entropy(d, t, weight=m, reduction='sum') / m.sum()
     best, bad, best_state = np.inf, 0, None
     for epoch in range(epochs):
         start = time.time()
         net.train()
         for idx in torch.randperm(len(x)).split(batch):
-            loss = bce(net(x[idx])[0], y[idx])
+            loss = bce(net(x[idx])[0], y[idx], w[idx])
             opt.zero_grad()
             loss.backward()
             opt.step()
         net.eval()
         with torch.no_grad():
-            val = bce(net(xv)[0], yv).item()
+            val = bce(net(xv)[0], yv, wv).item()
         print(f'  epoch {epoch + 1:2d}  train loss {loss.item():.4f}  val loss {val:.4f}  ({time.time() - start:.0f}s)')
         if val < best:
             best, bad, best_state = val, 0, copy.deepcopy(net.state_dict())
