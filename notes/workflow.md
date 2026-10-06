@@ -155,7 +155,7 @@ computation is bit-for-bit the online one.
 ```
 
 1. builds the source (`sources.py`)
-2. trains the network on simulated labelled streams, or reloads `runs/models/<source>.pt`
+2. trains the network on simulated labelled streams, or reloads `runs/models/<source>_n<streams>_e<epochs>_s<seed>.pt`
 3. calibrates every detector to one false alarm per 1000 steps, on no-change streams
 4. runs all of them on fresh streams whose change is at `t = 500`
 5. prints how often each cried wolf early, how often and how late it caught the change

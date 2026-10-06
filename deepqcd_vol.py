@@ -26,7 +26,6 @@ from its calm level and ramps up, and a recurrent detector gets the start-up bon
 
 Run:  .venv/bin/python deepqcd_vol.py [--quick] [--sq]     -> prints results, saves figures/vol[_sq].png
 """
-import os
 import sys
 
 import matplotlib.pyplot as plt
@@ -35,7 +34,7 @@ import torch
 
 import sources
 from qcd import (DeepQCD, NetDetector, Recursive, bayes_metrics, cadd, check_causality, cusum, decision_statistics,
-                 interp_at, shiryaev, stopping_times, train)
+                 figure_path, interp_at, shiryaev, stopping_times, train)
 
 QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few streams
 SQ = '--sq' in sys.argv        # feature transformation: feed [r_t, r_t^2] instead of r_t alone
@@ -134,8 +133,7 @@ def main():
         a.grid(alpha=0.3)
         a.legend(fontsize=8)
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'figures', f'{tag}.png')
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = figure_path(f'{tag}.png')
     fig.savefig(out, dpi=120)
     print(f'\nSaved {out}')
 
