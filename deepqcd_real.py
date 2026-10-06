@@ -7,6 +7,7 @@ classical detectors.
     .venv/bin/python deepqcd_real.py --quick         # smoke test
     .venv/bin/python deepqcd_real.py --report        # table + figures/real.png from the saved runs/real/
     .venv/bin/python deepqcd_real.py --hybrid        # the hybrid variant (adds to the saved runs; see below)
+    .venv/bin/python deepqcd_real.py --rivals        # recompute only the classical rivals into the saved runs
 
 Protocol, per dataset:
 
@@ -23,6 +24,9 @@ Protocol, per dataset:
                        Gaussian with one kind of change, which they are not.
               MEWMA    multivariate EWMA chart (lambda = 0.1) of the observations whitened with f0: needs
                        only normal data, reacts to any mean shift.
+              Shewhart the same chart without smoothing (lambda = 1, Hotelling T^2 of each observation):
+                       the classical choice for large, abrupt changes.
+            Some datasets add their field's standard rule (STA/LTA, freeze index, a self-calibrating chart).
   testing   Run on the same test windows; sweep the threshold; for each h:
               PFA      fraction of windows that alarm before the change
               ADD      mean delay over the windows that did not false-alarm, a window that never alarms
@@ -48,6 +52,7 @@ import realdata
 from qcd import DeepQCD, NetDetector, Recursive, cusum, decision_statistics, figure_path, train
 
 QUICK = '--quick' in sys.argv
+RIVALS = '--rivals' in sys.argv  # recompute only the classical rivals and merge them into the saved runs
 HYBRID = '--hybrid' in sys.argv  # train the hybrid variant instead of plain DeepQCD (results saved separately)
 SEEDS = 1 if QUICK else 3
 N_TRAIN = 200 if QUICK else 2000
@@ -292,11 +297,25 @@ def run(name):
     llr = GaussLLR(pre_n.astype(np.float64), post_n.astype(np.float64))
     stats['CUSUM (fitted Gaussians)'] = decision_statistics(Recursive(cusum, llr, None), xs)
     stats['MEWMA chart'] = decision_statistics(MEWMA(pre_n.astype(np.float64)), xs)
+    stats['Shewhart chart'] = decision_statistics(MEWMA(pre_n.astype(np.float64), lam=1.0), xs)
     for key in d.extra:
         label, cls = DOMAIN[key]
         stats[label] = decision_statistics(cls(pre_n), xs)
     for name_, s in stats.items():
         curves[name_] = tradeoff(s, tau, length)
+    if RIVALS:  # merge the rivals into the saved run, leaving the trained networks' curves as they are
+        stem = os.path.join('runs', 'real', name)
+        res = json.load(open(stem + '.json'))
+        z = dict(np.load(stem + '.npz'))
+        for k, c in curves.items():
+            res['detectors'][k] = {f'{lv}': {'ADD': at_level(c[0], c[1], lv, c[1]), 'DR': at_level(c[0], c[2], lv, c[1])}
+                                   for lv in LEVELS}
+            z.update({f'{k}|{m}': v for m, v in zip(('pfa', 'add', 'dr'), c)})
+        with open(stem + '.json', 'w') as f:
+            json.dump(res, f, indent=1, default=float)
+        np.savez(stem + '.npz', **z)
+        print_table(res)
+        return res, None
     tag = 'DeepQCD-hybrid' if HYBRID else 'DeepQCD'
     if HYBRID:
         mew = MEWMA(pre_n.astype(np.float64))
@@ -358,7 +377,8 @@ def plot(figs, path):
     cols = min(4, len(figs))
     rows = int(np.ceil(len(figs) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.2 * cols, 3.4 * rows), squeeze=False)
-    colors = {'CUSUM (fitted Gaussians)': 'C1', 'MEWMA chart': 'C2', **{v[0]: 'C3' for v in DOMAIN.values()}}
+    colors = {'CUSUM (fitted Gaussians)': 'C1', 'MEWMA chart': 'C2', 'Shewhart chart': 'C7',
+              **{v[0]: 'C3' for v in DOMAIN.values()}}
     for ax, (res, curves) in zip(axes.flat, figs):
         for k, (pfa, add, dr) in curves.items():
             # threshold order (PFA falls, ADD rises), drawn as the achievable frontier: for any budget between
@@ -415,6 +435,8 @@ def main():
     figs = []
     for n in names:
         res, curves = run(n)
+        if RIVALS:
+            continue
         figs.append((res, curves))
         if not QUICK:
             stem = os.path.join('runs', 'real', n + ('.hybrid' if HYBRID else ''))
@@ -422,6 +444,8 @@ def main():
                 json.dump(res, f, indent=1, default=float)
             np.savez(stem + '.npz',
                      **{f'{k}|{m}': v for k, c in curves.items() for m, v in zip(('pfa', 'add', 'dr'), c)})
+    if RIVALS:
+        return report()
     # a full run draws the tracked summary figure; a subset only a scratch one (rebuild with --report)
     full = len(names) == len(realdata.LOADERS) and not QUICK and not HYBRID
     plot(figs, figure_path('real.png') if full else os.path.join('runs', 'real', f'real_{"_".join(names)}.png'))

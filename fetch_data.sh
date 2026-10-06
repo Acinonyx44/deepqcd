@@ -49,6 +49,7 @@ for i in 0 1 2 3 4; do get $RAW/NanpengYu/pmuBAGE/main/data/voltage/voltage_$i.n
 echo sp500
 mkdir -p finance
 get $RAW/fja05680/dow-sp500-100-years/master/SP500.csv finance/SP500.csv
+
 echo seismic
 mkdir -p phasenet/npz
 get $RAW/AI4EPS/PhaseNet/master/dataset/waveform.csv phasenet/waveform.csv
