@@ -247,17 +247,22 @@ def at_level(pfa, val, level, add):
 
 # ---------------------------------------------------------------- hybrid DeepQCD
 
-def hybrid_features(x, m, llr, mewma, burn=20):
+def hybrid_features(x, m, llr, mewma, burn=20, chunk=100):
     """Inputs of the hybrid variant: the observations, the observations re-referenced to the stream's own
     first `burn` steps (causal running mean until then), the fitted log-LR and log(1 + MEWMA T^2). The LSTM
-    starts from what the classical charts already know and only has to learn what they miss."""
-    xm = x * m[..., None]
-    k = np.minimum(np.arange(x.shape[1]), burn - 1)
-    c = np.cumsum(xm, 1)[:, k] / (k + 1)[None, :, None]  # mean of the first min(t, burn) steps
-    l = np.clip(llr(x.astype(np.float64), None), -50, 50) / 10
-    t2 = np.log1p(decision_statistics(mewma, x)) / 3
-    f = np.concatenate([x, x - c, l[..., None], t2[..., None]], 2)
-    return (f * m[..., None]).astype(np.float32)
+    starts from what the classical charts already know and only has to learn what they miss.
+    Built `chunk` windows at a time: the float64 intermediates of 115-dimensional streams do not fit at once."""
+    n, L, P = x.shape
+    out = np.empty((n, L, 2 * P + 2), np.float32)
+    k = np.minimum(np.arange(L), burn - 1)
+    for i in range(0, n, chunk):
+        xc, mc = x[i:i + chunk], m[i:i + chunk]
+        c = np.cumsum(xc * mc[..., None], 1)[:, k] / (k + 1)[None, :, None]  # mean of the first min(t, burn) steps
+        l = np.clip(llr(xc.astype(np.float64), None), -50, 50) / 10
+        t2 = np.log1p(decision_statistics(mewma, xc)) / 3
+        f = np.concatenate([xc, xc - c, l[..., None], t2[..., None]], 2)
+        out[i:i + chunk] = f * mc[..., None]
+    return out
 
 
 # ---------------------------------------------------------------- one dataset
