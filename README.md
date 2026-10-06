@@ -30,9 +30,9 @@ deepqcd_vol.py        ours:     volatility-regime change in GARCH(1,1) returns: 
                       misspecified-IID CUSUM / Shiryaev and a rolling-variance rule (--sq feeds [r, r^2])
 notes/results.md      the numbers from all full runs, what reproduces, what does not, and why
 notes/datasets.md     real datasets (mostly on GitHub) that fit the recipe, how to turn each into QCD streams, pitfalls
-realdata.py           loaders reducing 15 real datasets to change episodes (fetch them with fetch_data.sh)
-deepqcd_real.py       DeepQCD vs fitted-Gaussian CUSUM and MEWMA on all of them at matched PFA -> figures/real.png
-notes/realdata.md     the real-data scorecard: where DeepQCD wins (3), ties (3) and loses (9), and why
+realdata.py           loaders reducing 21 real problems (15 benchmarks, 6 new applications) to change episodes
+deepqcd_real.py       DeepQCD (and a hybrid variant) vs CUSUM, MEWMA, Shewhart and field-standard rules -> figures/real.png
+notes/realdata.md     real-data scorecard: where DeepQCD works (5 wins, hybrid 7), where not (12 / 8 losses), vs the paper
 notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
 regen.sh              reruns every experiment, logging to runs/
@@ -78,7 +78,8 @@ Real data (all hosted on GitHub, ~1.1 GB into `data/`):
 ```bash
 ./fetch_data.sh
 uv sync --group realdata                      # scipy, for the .mat files
-.venv/bin/python deepqcd_real.py              # ~25 min on 4 CPUs -> figures/real.png, runs/real/
+.venv/bin/python deepqcd_real.py              # ~40 min on 4 CPUs -> figures/real.png, runs/real/
+.venv/bin/python deepqcd_real.py --hybrid     # the hybrid variant, merged by --report
 .venv/bin/python deepqcd_real.py skab tep     # a subset; --report rebuilds the table from runs/real/
 ```
 

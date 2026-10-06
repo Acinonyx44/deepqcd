@@ -1,118 +1,177 @@
-# DeepQCD on real data
+# DeepQCD on real data: where it works, where it doesn't
 
-Every dataset from `notes/datasets.md` that a cloud session can download, run through one protocol
-(`deepqcd_real.py`, loaders in `realdata.py`, data from `fetch_data.sh`). Figure: `figures/real.png`. Raw
-curves and per-seed numbers: `runs/real/` (git-ignored; `deepqcd_real.py --report` rebuilds the table and figure).
+There are 21 real-data problems: 15 benchmark datasets from `notes/datasets.md` and 6 new applications,
+each run through one protocol (`deepqcd_real.py`, loaders in `realdata.py`, data from `fetch_data.sh`).
+Figure: `figures/real.png`. Raw curves and per-seed numbers: `runs/real/` (git-ignored). Rebuild everything
+with `deepqcd_real.py --report`.
 
 ## Protocol in brief
 
-- **Episodes → windows.** Each dataset is reduced to episodes (normal, then changed at a known index). Train
-  and test windows take a pre-change stretch of random length in `[pmin, pmax]` and at most `H` post-change
-  steps. That makes tau random even where all recordings change at the same index (SKAB, TEP, pmuBAGE).
-  A quarter of the training windows are change-free where the dataset has such data.
-- **DeepQCD** is the paper's network trained from scratch on each dataset's training episodes: an LSTM
-  (16 units, or 32 above 10 inputs) feeding a dense layer and a sigmoid, BCE loss, early stopping on
-  held-out episodes. Three seeds are run.
-- **Rivals**, fitted on the same training windows:
-  - a **CUSUM** on two Gaussians, f0 fitted to pre-change samples and f1 to post-change samples;
-  - an **MEWMA chart**, which needs only normal data.
-- **Scoring.** On the same test windows, the threshold is swept to trace the trade-off curve:
-  - **PFA**: fraction of windows that alarm before the change;
-  - **ADD**: mean delay over the windows without a false alarm, with a window that never alarms counting
-    its full horizon;
-  - **DR**: fraction of those windows that alarm within the horizon.
+- **Episodes → windows.** Each dataset is reduced to episodes: normal, then changed at a known index.
+  Train and test windows take a pre-change stretch of random length in `[pmin, pmax]` and at most `H`
+  post-change steps, so tau is random even where all recordings change at the same index. A quarter of
+  the training windows are change-free where the dataset has such data.
+- **DeepQCD** is the paper's network trained from scratch on each dataset: an LSTM (16 units, 32 above
+  10 inputs) feeding a dense layer and a sigmoid, BCE loss, early stopping on held-out episodes. Three
+  seeds are run.
+- **DeepQCD-hybrid** (ours, `--hybrid`) is the same network with extra inputs: the observations
+  re-referenced to the stream's own first 20 steps, the fitted log-LR and the MEWMA statistic. The
+  network starts from what the classical charts know.
+- **Classical rivals**, fitted on the same training windows:
+  - a **CUSUM** on two fitted Gaussians;
+  - a **MEWMA** chart (λ = 0.1);
+  - a **Shewhart** T² chart (λ = 1, for abrupt changes);
+  - where a field has one, its own standard rule: **STA/LTA** for seismic, the **freeze index** for gait, a
+    **self-calibrating chart** for keystrokes.
 
-  Detectors are compared at the operating point for a false-alarm budget PFA ≤ 0.05 / 0.1 / 0.25, never at
-  equal thresholds.
+  "Best classical" below is whichever of these does best on that dataset, so the bar is high.
+- **Scoring.** On the same test windows the threshold is swept, and each detector is read at the operating
+  point for a false-alarm budget PFA ≤ 0.1:
+  - **DR**: fraction of the other windows that alarm within the horizon;
+  - **ADD**: mean delay, with a miss counted as the full horizon.
+- **Verdict rule** (applied mechanically): WIN if DR is at least 5 points higher, or DR is within 5 points
+  and ADD at least 10 % lower; *loss* is the mirror image; *none* if every detector catches under 10 %.
 
-## Scorecard (PFA ≤ 0.1)
+## Scorecard at PFA ≤ 0.1 (DR · ADD; DeepQCD = median of 3 seeds)
 
-DR = detection rate within the horizon (higher is better), ADD = delay (lower is better). DeepQCD is the
-median of 3 seeds. **Bold** marks the best of the three detectors when the gap is clear.
+### Benchmark datasets
 
-| dataset | episodes train / test | DeepQCD DR · ADD | CUSUM (fitted) DR · ADD | MEWMA DR · ADD | verdict |
-|---|---|---|---|---|---|
-| Bee waggle dance | 74 / 43 | **0.80 · 15.1** | 0.24 · 22.7 | 0.30 · 22.2 | **DeepQCD**, by a lot |
-| SMD server machines | 155 / 171 | **0.18 · 22.6** | 0.02 · 29.7 | 0.03 · 27.9 | **DeepQCD** (all weak) |
-| C-MAPSS turbofans † | 67 / 29 | 1.00 · **45.1** | 1.00 · 49.8 | 1.00 · 51.0 | DeepQCD, modestly |
-| TCPD (univariate) | 35 / 24 | 0.27 · 17.8 | 0.27 · 17.8 | 0.27 · 17.5 | tie |
-| Yahoo S5 | 32 / 20 | 0.17 · 2.5 | 0.17 · 2.6 | 0.06 · 2.8 | tie (nobody detects) |
-| Fish kill | 25 / 15 | 0.00 · 15.8 | 0.01 · 15.6 | 0.00 · 16.3 | nobody detects |
-| S&P 500 stress ‡ | GARCH sim / 16 | 0.86 · 15.6 | **0.93 · 8.7** | 0.86 · 14.0 | classical, slightly |
-| HAI 21.03 ICS attacks | 30 / 20 | 0.84 · 30.3 | 0.90 · 29.9 | **0.94 · 29.7** | classical, slightly |
-| NAB | 63 / 46 | 0.16 · 84.0 | **0.29 · 72.5** | 0.14 · 85.9 | classical |
-| HASC activities | 17 / 48 | 0.00 · 89.9 | **0.13 · 83.4** | 0.02 · 88.2 | classical (all weak) |
-| Occupancy | 7 / 12 | 0.82 · 5.4 | **1.00 · 1.1** | 1.00 · 14.3 | classical |
-| Occupancy, no light sensor | 7 / 12 | 0.09 · 46.0 | **0.40 · 40.5** | 0.23 · 50.3 | classical |
-| pmuBAGE grid events | 110 / 74 | 0.73 · 39.9 | 0.88 · 21.2 | **0.91 · 17.4** | classical |
-| SKAB water pump | 20 / 14 | 0.09 · 116.7 | 0.21 · 99.7 | **0.28 · 93.1** | classical |
-| Tennessee Eastman | 42 / 21 | 0.66 · 103.3 | 0.76 · 72.6 | **0.87 · 50.5** | classical, clearly |
+| dataset | train eps | DeepQCD | | DeepQCD-hybrid | | best classical |
+|---|---|---|---|---|---|---|
+| Bee waggle dance | 74 | 0.80 · 15.1 | **WIN** | 0.78 · 14.6 | **WIN** | MEWMA 0.30 · 22.2 |
+| SMD server machines | 155 | 0.18 · 22.6 | **WIN** | 0.17 · 22.5 | **WIN** | Shewhart 0.10 · 26.4 |
+| C-MAPSS turbofans † | 67 | 1.00 · 45.1 | tie | 1.00 · 34.6 | **WIN** | CUSUM 1.00 · 49.8 |
+| Room occupancy | 7 | 0.82 · 5.4 | loss | 1.00 · 0.5 | **WIN** | CUSUM 1.00 · 1.1 |
+| Occupancy, no light sensor | 7 | 0.09 · 46.0 | loss | 0.44 · 37.1 | tie | CUSUM 0.40 · 40.5 |
+| HAI ICS attacks | 30 | 0.84 · 30.3 | loss | 0.94 · 28.9 | tie | MEWMA 0.94 · 29.7 |
+| TCPD | 35 | 0.27 · 17.8 | tie | 0.27 · 17.7 | tie | MEWMA 0.27 · 17.5 |
+| Yahoo S5 | 32 | 0.17 · 2.5 | tie | 0.15 · 2.5 | tie | Shewhart 0.17 · 2.4 |
+| Fish kill | 25 | 0.00 · 15.8 | none | 0.00 · 16.1 | none | CUSUM 0.01 · 15.6 |
+| Tennessee Eastman | 42 | 0.66 · 103.3 | loss | 0.88 · 64.6 | loss | Shewhart 0.90 · 37.2 |
+| pmuBAGE grid events | 110 | 0.73 · 39.9 | loss | 0.85 · 29.3 | loss | MEWMA 0.91 · 17.4 |
+| SKAB water pump | 20 | 0.09 · 116.7 | loss | 0.20 · 101.1 | loss | MEWMA 0.28 · 93.1 |
+| NAB | 63 | 0.16 · 84.0 | loss | 0.11 · 89.7 | loss | CUSUM 0.29 · 72.5 |
+| HASC activities | 17 | 0.00 · 89.9 | loss | 0.00 · 89.8 | loss | CUSUM 0.13 · 83.4 |
+| S&P 500 stress ‡ | GARCH sim | 0.86 · 15.6 | loss | 0.73 · 22.9 | loss | CUSUM 0.93 · 8.7 |
 
-† The fault onset is a convention: 125 cycles before failure. ‡ The network is trained on the simulated GARCH
-change, and the 16 event dates are our choice. Full numbers at all three PFA levels are in the run log
-(`deepqcd_real.py --report`).
+### New applications
 
-**Overall: 3 wins, 3 ties (two of them "nobody detects"), 9 losses.** Trained from scratch on a real
-dataset, DeepQCD rarely beats a well-fitted classical chart. The MEWMA chart in particular is a hard
-baseline, and it needs no abnormal data at all.
+| application | train eps | DeepQCD | | DeepQCD-hybrid | | best classical |
+|---|---|---|---|---|---|---|
+| **Crypto pump-and-dump** (5 s chunks) | 190 | 0.91 · 1.3 | **WIN** | 0.94 · 0.9 | **WIN** | CUSUM 0.53 · 5.7 |
+| IoT Mirai botnet, paper protocol (packets) | 300 | 1.00 · 0.2 | **WIN** | 1.00 · 0.2 | **WIN** | CUSUM 1.00 · 1.1 |
+| IoT Mirai botnet, temporal blocks (packets) | 300 | 1.00 · 1.4 | **WIN** | 1.00 · 1.3 | **WIN** | CUSUM 1.00 · 1.7 |
+| Account takeover, keystrokes (entries) | 600 | 0.43 · 29.2 | loss | 0.91 · 8.0 | loss | self-calibrating 0.97 · 5.7 |
+| Freezing of gait (1/32 s) | 151 | 0.18 · 101.5 | loss | 0.26 · 95.2 | tie | CUSUM 0.28 · 98.1 |
+| Earthquake P-wave onset (10 ms) | 92 | 0.27 · 235.1 | loss | 0.46 · 191.1 | loss | Shewhart 0.93 · 46.8 |
 
-## What separates the wins from the losses
+† The fault onset is a convention: 125 cycles before failure. ‡ The network is trained on simulated GARCH
+only, and the 16 event dates are our choice.
 
-- **Wins come from changes that are not a level shift.**
-  - Bee dance: the dance phases differ in the *pattern* of motion (turning direction, waggle oscillation).
-  - SMD: incidents show up as co-movements across 38 server metrics.
-  - C-MAPSS: slow multivariate drift.
+**Tally over 21 problems:**
 
-  A Gaussian mean/covariance model sees little of any of these, while the LSTM can learn them. In each case
-  the training set also has many episodes of the same kind of change (67-155).
-- **Losses are mostly step changes**: pmuBAGE events, most Tennessee Eastman faults, SKAB valve faults, the
-  occupancy CO₂/light jump. Those are exactly what MEWMA and CUSUM are built for. DeepQCD has to learn the
-  same thing from 7-110 examples and does it less sharply.
-- **Little or one-sided normal data hurts DeepQCD most.**
-  - Occupancy has 7 training arrivals.
-  - SKAB has 20 runs and one anomaly-free file.
-  - Tennessee Eastman originally had a single 500-sample normal run. The network memorized it and read the
-    test runs' normal stretch as abnormal: its median output there was 0.15 against 0.009 on the training
-    normal data, and detection at PFA ≤ 0.1 was 5 %. Adding the dataset's second normal run (`d00_te`, in
-    no test episode) brought it to 66 %. All numbers above use both runs, for every detector.
+| | WIN | tie | none | loss |
+|---|---|---|---|---|
+| DeepQCD | 5 | 3 | 1 | 12 |
+| DeepQCD-hybrid | 7 | 5 | 1 | 8 |
 
-  A model that only needs normal data (MEWMA) is far less exposed to this.
-- **Transient labels do not fit the persistent-change setting.** Yahoo's labels are mostly single-point
-  outliers and fish kills last ~10-20 steps. None of the three detectors gets above ~17 % detection there.
-  These sets measure outlier detection, not quickest change detection.
-- **Real volatility (S&P 500).** A network trained only on simulated GARCH is in the same range as the
-  classical detectors on 16 real stress episodes. At PFA ≤ 0.05 it detects 79 %, against 63 % for the
-  fitted CUSUM and 81 % for MEWMA. At PFA ≤ 0.1 the CUSUM is faster. The tie mirrors the synthetic finding
-  in `notes/results.md`: once false alarms are matched, the detectors land close together.
-- **Seed spread is large on small datasets.** ADD at PFA ≤ 0.1 ranges over 37-50 cycles (C-MAPSS) and
-  15-22 days (S&P 500) across the three seeds. With 12-48 test episodes, differences of a few points in DR
-  are within noise. The clear verdicts are the large gaps: bee dance, SMD, Tennessee Eastman, pmuBAGE and
-  SKAB.
+The hybrid is never much worse than plain DeepQCD, with one exception: S&P 500, where its classical inputs
+come from synthetic training data. It turns occupancy and C-MAPSS into wins and Tennessee Eastman,
+keystrokes and freezing of gait into near-ties.
+
+## Where DeepQCD works
+
+1. **The change is a *pattern*, not a level.**
+   - Bee-dance phases differ in motion pattern: 0.80 vs 0.30 detected.
+   - SMD incidents are co-movements across 38 server metrics.
+   - Pump-and-dumps have a characteristic joint signature of rush orders, trades and volume.
+
+   A Gaussian mean/covariance chart sees little of this; an LSTM can learn it.
+2. **Normal data is heavy-tailed or bursty, so Gaussian charts drown in false alarms.** Pump-and-dump is
+   the clearest case. Ordinary trading has spikes, and every Gaussian chart (CUSUM, MEWMA, Shewhart at any
+   λ we tried) needs a high threshold to stay under PFA 0.1, so it catches only ~50 %. DeepQCD learned
+   what a *pump* spike looks like versus an ordinary one and catches 91-94 % within ~1 chunk (≈5-7 s
+   against ≈28 s).
+3. **There are many training episodes of the same kind of change** (74-300 in every win).
+
+## Where it does not
+
+1. **Abrupt step changes.** The Shewhart chart is a near-optimal detector for those, and DeepQCD has to
+   learn the same thing from a few dozen examples, less sharply:
+   - seismic P onset: Shewhart 0.93, STA/LTA 0.81, DeepQCD 0.27;
+   - Tennessee Eastman: 0.90 vs 0.66;
+   - pmuBAGE events;
+   - SKAB valves.
+2. **Little training data**: occupancy (7 arrivals), SKAB (20), HASC (17), plus one-sided normal data.
+   Tennessee Eastman with its single 500-sample normal run collapsed to 5 % detection until a second normal
+   run was added.
+3. **Each stream has its own normal** (keystrokes: every typist differs; test typists are unseen). A
+   chart that simply calibrates on the first 15 entries of the session catches 97 % within ~6 entries.
+   Plain DeepQCD manages 43 %; the hybrid, given the self-referenced input, reaches 91 %.
+4. **Labels that are not lasting changes** (fish kill, Yahoo: 1-20-step bursts). Nobody detects these;
+   they are outlier-detection data, not quickest change detection.
+
+## Versus the paper's own applications
+
+The paper reports two real applications (Sec. 6):
+- **Video:** UCF-Crime road accidents, I3D features, against a frame-prediction detector.
+- **IoT:** N-BaIoT BASHLITE spam on a thermostat, 115 features. Normal and attack samples are drawn
+  *independently* (an IID splice) with the change at t = 1, against PCA-CUSUM, QuantTree and others.
+
+Neither UCF-Crime nor N-BaIoT is reachable from a cloud session. The Kitsune Mirai capture has the same
+115-feature N-BaIoT representation on a real infection, so we ran it both with the paper's IID-splice
+protocol and with contiguous time blocks:
+
+- **The paper's IoT result reproduces in direction, but the problem is easy.** At PFA ≤ 0.1, DeepQCD alarms
+  0.2 packets after the attack starts against 1.1 for the best chart (IID splice), and 1.4 vs 1.7 with real
+  temporal blocks. Every detector catches 100 %: the attack shifts the features by 8-16 standard deviations.
+  DeepQCD's edge is about one packet, and most of it vanishes once the stream keeps its real time
+  structure. The large gaps in the paper's Fig. 15 come from weaker baselines and the t = 1 protocol, which
+  our synthetic experiments showed flatters recurrent detectors (`notes/results.md`).
+- **The applications where DeepQCD beats the classical state of the art by more than in the paper's IoT
+  case:**
+  - **Pump-and-dump:** +38 points detection and 4× faster.
+  - **Bee dance:** +50 points.
+  - **SMD:** +8 points and ~15 % faster, at low absolute detection.
+  - **C-MAPSS** (hybrid): 31 % faster.
+  - **Occupancy** (hybrid): 2× faster.
+
+  These are the cases with a learnable non-Gaussian signature and enough episodes, exactly the profile
+  above.
 
 ## Caveats
 
-- One train/test split per dataset (seeded, by recording, entity or episode); only DeepQCD's training seed
-  varies.
-- The PFA-matched operating point is chosen on the test windows themselves. That is an oracle calibration,
-  but it is the same for all detectors.
-- There was no per-dataset tuning of DeepQCD (window length, hidden size, features), and no feature
-  engineering. The paper's own real-data experiments use pretrained I3D video features and engineered
-  network-flow statistics. Raw sensor channels are a harder test.
-- The CUSUM is fitted to post-change data from the training episodes, as DeepQCD is, so both rely on the
-  test changes resembling the training changes. MEWMA does not.
+- One train/test split per dataset; only the networks' seeds vary. Seed spread is large on small sets: at
+  PFA ≤ 0.1, ADD ranges over 37-50 cycles on C-MAPSS and 27-30 entries on keystrokes. With 12-48 test
+  episodes, differences of a few points are noise; the clear verdicts are the large gaps.
+- The Mirai test windows are cut from one capture, the second half of its normal and attack stretches. The
+  150 test episodes are therefore not independent infections.
+- The PFA-matched operating point is chosen on the test windows (an oracle calibration), identically for
+  every detector.
+- No per-dataset tuning of the networks, and raw channels as inputs. The paper's real-data experiments
+  used engineered or pretrained features.
+- C-MAPSS onsets and S&P 500 dates are conventions, not ground truth.
 
 ## Not run, and why
 
 - **Hosts unreachable from a cloud session** (UCI, PhysioNet, Kaggle, Harvard Dataverse, Stanford, S3,
-  thedatum.org): N-BaIoT (the paper's own IoT set), CICIoT2023, CIC-IDS2017, STEAD, CHB-MIT, MIT-BIH AF,
-  Tennessee Eastman (Rieth, 500 runs per fault), SMAP/MSL, UCR anomaly archive, TSB-AD.
+  Hugging Face, thedatum.org):
+  - N-BaIoT and UCF-Crime (the paper's own data);
+  - CICIoT2023 and CIC-IDS2017;
+  - STEAD (we used PhaseNet's 154 traces instead) and CHB-MIT;
+  - MIT-BIH AF;
+  - Tennessee Eastman (Rieth, 500 runs per fault);
+  - SMAP/MSL, UCR, TSB-AD;
+  - the original Daphnet files (we used a GitHub-hosted .mat of the same data).
 - **Access by request:** SWaT and WADI.
 - **Need a laptop download:** REDD/UK-DALE, GOES flares, FEMTO/CWRU bearings, FI-2010/LOBSTER.
-- **Reachable but not run:**
-  - JHU COVID-19 (no onset labels to score against);
+- **Reachable but not used:**
+  - the comsyssec "mirai" set (synthetic localhost traffic, interleaved packets);
+  - JHU COVID-19 (no onset labels);
   - VIX (redundant with the S&P 500 returns);
-  - GutenTAG (synthetic);
-  - PSML.
+  - GutenTAG (synthetic).
 
-The highest-value next run is the Rieth Tennessee Eastman set on a laptop. With 500 independent runs per
-fault instead of 1, it tests directly whether DeepQCD's loss there is a data-size problem.
+The most informative next runs need a laptop:
+1. **N-BaIoT itself**, under both protocols, to settle the paper's IoT claim on its own data.
+2. **The 500-run Tennessee Eastman set**, to test whether more data closes the gap on step-like faults.
+3. **STEAD**, to give the seismic network ~10⁵ training traces instead of 92.
