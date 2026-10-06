@@ -29,6 +29,7 @@ deepqcd_transient.py  Sec. 5.3  transient:     DeepQCD vs window-limited CUSUM, 
 deepqcd_vol.py        ours:     volatility-regime change in GARCH(1,1) returns: DeepQCD vs GARCH-aware and
                       misspecified-IID CUSUM / Shiryaev and a rolling-variance rule (--sq feeds [r, r^2])
 notes/results.md      the numbers from all full runs, what reproduces, what does not, and why
+notes/datasets.md     real datasets (mostly on GitHub) that fit the recipe, how to turn each into QCD streams, pitfalls
 notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
 regen.sh              reruns every experiment, logging to runs/
