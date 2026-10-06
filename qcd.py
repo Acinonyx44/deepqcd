@@ -14,6 +14,7 @@ which is what makes evaluating thousands of streams take minutes instead of the 
 """
 import copy
 import os
+import sys
 import time
 
 import numpy as np
@@ -82,6 +83,16 @@ def load_or_train(path, net, make_data, retrain=False, **kw):
     torch.save(net.state_dict(), path)
     print(f'  saved weights to {path}')
     return net
+
+
+def figure_path(name):
+    """Where a script saves its figure: figures/<name>, or runs/quick/<name> under --quick, so a smoke test
+    never overwrites the tracked figures with numbers from a 2-epoch network."""
+    root = os.path.dirname(os.path.abspath(__file__))
+    sub = os.path.join('runs', 'quick') if '--quick' in sys.argv else 'figures'
+    out = os.path.join(root, sub, name)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    return out
 
 
 def check_causality(net, x):

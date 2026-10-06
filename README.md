@@ -31,7 +31,8 @@ deepqcd_vol.py        ours:     volatility-regime change in GARCH(1,1) returns: 
 notes/results.md      the numbers from all full runs, what reproduces, what does not, and why
 notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
-figures/              output figures (tracked); runs/ holds logs (git-ignored)
+regen.sh              reruns every experiment, logging to runs/
+figures/              output figures (tracked); runs/ holds logs, cached weights, --quick figures (git-ignored)
 ```
 
 ## Setup
@@ -60,15 +61,17 @@ time, one calibrated threshold, and the resulting delays — use the driver:
 .venv/bin/python detect.py --source ar --tau 500 --trials 5000     # sources: iid, ar, garch, garch-sq
 ```
 
-It trains once and caches the weights in `runs/models/`, so later runs start at the calibration step.
+It trains once and caches the weights in `runs/models/`, keyed by source, `--train-streams`, `--epochs` and `--seed`,
+so later runs with the same settings start at the calibration step.
 `notes/workflow.md` walks through what each phase does and where it lives in the code.
 
 ```bash
-runs/regen.sh                                 # regenerate every number in notes/results.md, ~45 min
+./regen.sh                                    # regenerate every number in notes/results.md, ~45 min
 ```
 
 Every experiment script takes `--quick` (tiny dataset, 2 epochs, 10x fewer test streams) for a ~10 s smoke test;
-the numbers it prints are then meaningless, only the plumbing is exercised.
+the numbers it prints are then meaningless, only the plumbing is exercised, and its figure goes to `runs/quick/`
+instead of overwriting the tracked one in `figures/`.
 
 ## What is and isn't runnable
 

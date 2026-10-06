@@ -14,7 +14,8 @@ comparison is not meaningful any other way: the statistics have different units,
 Phases, and where each one lives:
 
   1. offline training (Alg. 1)  labelled streams from the source, BCE, early stopping.  Cached in
-                                runs/models/<source>.pt; --retrain forces a fresh fit.
+                                runs/models/<source>_n<streams>_e<epochs>_s<seed>.pt;
+                                --retrain forces a fresh fit.
   2. calibration                streams with no change at all (tau = inf), to measure the average false
                                 alarm period FAP(h) for every h on each detector's grid.
   3. real-time detection (Alg. 2)  fresh streams with the change at --tau; each detector runs one
@@ -35,7 +36,7 @@ import numpy as np
 import torch
 
 import sources
-from qcd import DeepQCD, NetDetector, decision_statistics, load_or_train, stopping_times
+from qcd import DeepQCD, NetDetector, decision_statistics, figure_path, load_or_train, stopping_times
 
 
 def parse_args():
@@ -75,7 +76,8 @@ def main():
     torch.manual_seed(a.seed)
     np.random.seed(a.seed)
     net = DeepQCD(src.input_dim)
-    path = os.path.join('runs', 'models', f'{src.name}.pt')
+    # Everything that changes the trained weights goes in the name, so a cache hit is always the same fit.
+    path = os.path.join('runs', 'models', f'{src.name}_n{a.train_streams}_e{a.epochs}_s{a.seed}.pt')
 
     def make_data():
         T = src.T_train
@@ -202,8 +204,7 @@ def main():
             a0.grid(alpha=0.3)
     fig.suptitle(f'{src.label} — change at t = {a.tau}', y=0.995)
     fig.tight_layout()
-    out = os.path.join('figures', f'detect_{src.name}_tau{a.tau}.png')
-    os.makedirs('figures', exist_ok=True)
+    out = figure_path(f'detect_{src.name}_tau{a.tau}.png')
     fig.savefig(out, dpi=120)
     print(f'\nSaved {out}')
 

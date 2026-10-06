@@ -20,14 +20,13 @@ Differences from the notebook (original/Sec. 5.3 -- TransientQCD/Justification_T
 
 Run:  .venv/bin/python deepqcd_transient.py [--quick]     -> prints results, saves figures/transient.png
 """
-import os
 import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from qcd import (DeepQCD, NetDetector, WindowCUSUM, check_causality, decision_statistics, interp_at,
+from qcd import (DeepQCD, NetDetector, WindowCUSUM, check_causality, decision_statistics, figure_path, interp_at,
                  stopping_times, train)
 
 QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few streams
@@ -113,8 +112,7 @@ def main():
         a.grid(alpha=0.3)
         a.legend()
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'figures', 'transient.png')
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = figure_path('transient.png')
     fig.savefig(out, dpi=120)
     print(f'\nSaved {out}')
 

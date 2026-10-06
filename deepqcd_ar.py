@@ -20,7 +20,6 @@ which a recurrent network can learn and the time-invariant CUSUM / SR recursions
 
 Run:  .venv/bin/python deepqcd_ar.py [--quick]     -> prints results, saves figures/ar.png
 """
-import os
 import sys
 
 import matplotlib.pyplot as plt
@@ -29,7 +28,7 @@ import torch
 
 import sources
 from qcd import (DeepQCD, NetDetector, Recursive, interp_at, bayes_metrics, cadd, check_causality, cusum,
-                 decision_statistics, shiryaev, shiryaev_roberts, stopping_times, train)
+                 decision_statistics, figure_path, shiryaev, shiryaev_roberts, stopping_times, train)
 
 QUICK = '--quick' in sys.argv  # smoke-test mode: tiny dataset, few epochs, few streams
 Q = 10 if QUICK else 1
@@ -119,8 +118,7 @@ def main():
         a.grid(alpha=0.3)
         a.legend()
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'figures', 'ar.png')
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = figure_path('ar.png')
     fig.savefig(out, dpi=120)
     print(f'\nSaved {out}')
 
