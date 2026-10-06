@@ -46,6 +46,8 @@ class RealData:
     calm: list = field(default_factory=list)  # change-free (T, P) stretches for training
     notes: str = ''
     synthetic: object = None       # optional: training_set(n, T, tau) -> (x, y) replacing real training data
+    extra: tuple = ()              # names of domain-standard detectors to add (see deepqcd_real.DOMAIN)
+    group: str = 'benchmark'       # 'benchmark' (notes/datasets.md sets) or 'application' (new applications)
 
 
 def _path(*p):
@@ -364,8 +366,134 @@ def sp500():
                     synthetic=src, notes='trained on simulated GARCH, tested on 16 dated real episodes')
 
 
+# ---------------------------------------------------------------- new applications
+
+def seismic():
+    """Earthquake P-wave onset (early warning): PhaseNet's 154 labelled 3-component traces, 100 Hz, P arrival
+    at sample 3000. Each trace is scaled by the noise level of its first 10 s (known station noise)."""
+    rows = list(csv.DictReader(open(_path('phasenet', 'waveform.csv'))))
+    eps = []
+    for r in rows:
+        x = np.load(_path('phasenet', 'npz', r['fname']))['data']
+        sd = x[:1000].std(0)
+        x = x / np.where(sd > 0, sd, 1)
+        eps.append((np.clip(x, -1e3, 1e3).astype(np.float32), int(r['itp'])))
+    tr, te = _split(eps, 0.6, 0)
+    return RealData('seismic', 'Seismic P-wave onset (PhaseNet)', '10 ms', tr, te, pmin=100, pmax=1500, H=300,
+                    extra=('stalta',), group='application',
+                    notes='154 traces; rival: STA/LTA trigger (the field standard)')
+
+
+def fog():
+    """Freezing of gait in Parkinson's disease (Daphnet): ankle accelerometer, 64 Hz averaged to 32 Hz; each
+    freeze onset is an episode. Subjects split 6 / 4 (no subject in both)."""
+    import scipy.io
+    a = scipy.io.loadmat(_path('daphnet', 'daphnet.mat'))['data']
+    per = {}
+    for subj in np.unique(a[:, 8]):
+        b = a[a[:, 8] == subj]
+        cuts = np.flatnonzero(np.diff(b[:, 0]) > 0.05) + 1  # recording boundaries
+        for seg in np.split(b, cuts):
+            n = len(seg) // 2 * 2
+            x = seg[:n, 1:4].reshape(-1, 2, 3).mean(1) / 1000.0  # 32 Hz, in g
+            lab = seg[:n, 7].reshape(-1, 2).max(1)
+            e, c = from_intervals(x, lab, min_pre=64)
+            per.setdefault(subj, ([], []))
+            per[subj][0].extend(e)
+            per[subj][1].extend(c)
+    subs = sorted(s for s in per if per[s][0])
+    tr_s, te_s = _split(subs, 0.6, 0)
+    return RealData('fog', 'Freezing of gait (Daphnet)', '1/32 s', [e for s_ in tr_s for e in per[s_][0]],
+                    [e for s_ in te_s for e in per[s_][0]], pmin=64, pmax=640, H=160,
+                    calm=[c for s_ in tr_s for c in per[s_][1]], extra=('freeze_index',), group='application',
+                    notes='subjects split; rival: Moore-Baechlin freeze index (3-8 Hz / 0.5-3 Hz power)')
+
+
+def pumpdump():
+    """Crypto pump-and-dump onset (La Morgia et al.): market features of the pumped coin in 5 s chunks around
+    317 Telegram-announced pumps; tau = the pump chunk. Chronological split (first 60 % of pumps train)."""
+    rows = list(csv.DictReader(gzip.open(_path('pumpdump', 'features_5S.csv.gz'), 'rt')))
+    cols = ['std_rush_order', 'avg_rush_order', 'std_trades', 'std_volume', 'avg_volume', 'std_price',
+            'avg_price', 'avg_price_max']
+    pumps = {}
+    for r in rows:
+        pumps.setdefault(int(r['pump_index']), []).append(([float(r[c]) for c in cols], int(r['gt'])))
+    eps = []
+    for k in sorted(pumps):
+        x = np.array([v for v, _ in pumps[k]])
+        g = np.flatnonzero([g for _, g in pumps[k]])
+        if len(g) == 1 and g[0] >= 50 and len(x) - g[0] >= 3:
+            eps.append((x.astype(np.float32), int(g[0])))
+    k = int(0.6 * len(eps))
+    return RealData('pumpdump', 'Crypto pump-and-dump', '5 s chunk', eps[:k], eps[k:], pmin=50, pmax=600, H=12,
+                    group='application', notes=f'{len(eps)} pumps; chronological split')
+
+
+def keystroke():
+    """Account takeover from typing rhythm (CMU keystroke benchmark): a session of user A's password entries
+    continues with user B's. Users split 31 / 20, so the test asks for detecting a *change of typist* among
+    unseen people, not recognizing a known one."""
+    rows = list(csv.reader(open(_path('keystroke', 'DSL-StrongPasswordData.csv'))))[1:]
+    by = {}
+    for r in rows:
+        by.setdefault(r[0], []).append([np.arcsinh(float(v) / 0.05) for v in r[3:]])  # log-like, sign-safe
+    users = sorted(by)
+    by = {u: np.array(v, dtype=np.float32) for u, v in by.items()}
+    rng = np.random.default_rng(0)
+
+    def make(us, n):
+        eps = []
+        for _ in range(n):
+            a, b = rng.choice(len(us), 2, replace=False)
+            xa, xb = by[us[a]], by[us[b]]
+            s = rng.integers(len(xa) - 150)
+            t = rng.integers(len(xb) - 40)
+            eps.append((np.concatenate([xa[s:s + 150], xb[t:t + 40]]), 150))
+        return eps
+    tr_u, te_u = users[:31], users[31:]
+    return RealData('keystroke', 'Account takeover (keystrokes)', 'entry', make(tr_u, 600), make(te_u, 300),
+                    pmin=20, pmax=100, H=40, extra=('selfref',), group='application',
+                    notes='asinh-scaled timings of 31 keys; unseen test users; rival: chart calibrated on the session start')
+
+
+def _mirai(iid):
+    X = np.load(_path('kitnet', 'mirai3.npy'))
+    ref = X[5000:50000]
+    X = np.clip(_standardize_by(X, ref), -50, 50)
+    rng = np.random.default_rng(0)
+    regions = {'train': (np.arange(5000, 50000), np.arange(72500, 88000)),
+               'test': (np.arange(50000, 72500), np.arange(88000, 100000))}
+
+    def make(part, n, pre=1200, post=200):
+        nor, att = regions[part]
+        eps = []
+        for _ in range(n):
+            if iid:  # the paper's N-BaIoT protocol: samples drawn independently from each pool
+                idx = np.r_[rng.choice(nor, pre), rng.choice(att, post)]
+            else:    # contiguous blocks: real temporal dynamics on both sides of the splice
+                a, b = rng.integers(len(nor) - pre), rng.integers(len(att) - post)
+                idx = np.r_[nor[a:a + pre], att[b:b + post]]
+            eps.append((X[idx], pre))
+        return eps
+    name = 'iot-mirai-iid' if iid else 'iot-mirai'
+    label = 'IoT Mirai botnet' + (' (paper protocol: IID splice)' if iid else ' (temporal blocks)')
+    return RealData(name, label, 'packet', make('train', 300), make('test', 150), pmin=50, pmax=1000, H=200,
+                    group='application',
+                    notes='Kitsune/N-BaIoT 115 features; attack from obs ~72500; normal and attack time-split')
+
+
+def iot_mirai():
+    return _mirai(False)
+
+
+def iot_mirai_iid():
+    return _mirai(True)
+
+
 LOADERS = {
     'skab': skab, 'tep': tep, 'occupancy': occupancy, 'occupancy-nolight': lambda: occupancy(light=False),
     'cmapss': cmapss, 'smd': smd, 'hai': hai, 'nab': nab, 'tcpd': tcpd, 'beedance': beedance, 'hasc': hasc,
     'fishkiller': fishkiller, 'yahoo': yahoo, 'pmubage': pmubage, 'sp500': sp500,
+    'seismic': seismic, 'fog': fog, 'pumpdump': pumpdump, 'keystroke': keystroke, 'iot-mirai': iot_mirai,
+    'iot-mirai-iid': iot_mirai_iid,
 }

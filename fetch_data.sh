@@ -49,4 +49,30 @@ for i in 0 1 2 3 4; do get $RAW/NanpengYu/pmuBAGE/main/data/voltage/voltage_$i.n
 echo sp500
 mkdir -p finance
 get $RAW/fja05680/dow-sp500-100-years/master/SP500.csv finance/SP500.csv
+echo seismic
+mkdir -p phasenet/npz
+get $RAW/AI4EPS/PhaseNet/master/dataset/waveform.csv phasenet/waveform.csv
+tail -n +2 phasenet/waveform.csv | cut -d, -f1 | while read f; do
+    get $RAW/AI4EPS/PhaseNet/master/dataset/waveform_train/$f phasenet/npz/$f
+done
+
+echo fog
+mkdir -p daphnet
+get "$RAW/takotab/FOG/master/Code%20SVM/daphnet_19062017.mat" daphnet/daphnet.mat
+
+echo pumpdump
+mkdir -p pumpdump
+get $RAW/SystemsLab-Sapienza/pump-and-dump-dataset/master/labeled_features/features_5S.csv.gz pumpdump/features_5S.csv.gz
+
+echo keystroke
+mkdir -p keystroke
+get $RAW/bikramb98/Keystroke-dynamics/master/DSL-StrongPasswordData.csv keystroke/DSL-StrongPasswordData.csv
+
+echo iot-mirai
+mkdir -p kitnet
+if [ ! -s kitnet/mirai3.npy ]; then
+    get $RAW/ymirsky/KitNET-py/master/dataset.zip kitnet/dataset.zip
+    (cd kitnet && unzip -o -q dataset.zip mirai3.csv)
+    ../.venv/bin/python -c "import numpy as np; np.save('kitnet/mirai3.npy', np.loadtxt('kitnet/mirai3.csv', delimiter=',', dtype=np.float32))"
+fi
 echo done

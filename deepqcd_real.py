@@ -6,6 +6,7 @@ classical detectors.
     .venv/bin/python deepqcd_real.py skab tep        # a subset
     .venv/bin/python deepqcd_real.py --quick         # smoke test
     .venv/bin/python deepqcd_real.py --report        # table + figures/real.png from the saved runs/real/
+    .venv/bin/python deepqcd_real.py --hybrid        # the hybrid variant (adds to the saved runs; see below)
 
 Protocol, per dataset:
 
@@ -30,6 +31,9 @@ Protocol, per dataset:
             and report ADD and DR at the operating point for PFA <= 0.05, 0.1, 0.25 (the lowest threshold
             meeting the budget), i.e. at a matched false-alarm level, never at a matched threshold.
             The full curves are saved to runs/real/<name>.npz.
+  hybrid    --hybrid trains a variant whose LSTM also gets the classical statistics (fitted log-LR, MEWMA T^2)
+            and the input re-referenced to the stream's own first 20 steps; saved as <name>.hybrid.*, and
+            --report shows it next to plain DeepQCD.
 """
 import json
 import os
@@ -44,6 +48,7 @@ import realdata
 from qcd import DeepQCD, NetDetector, Recursive, cusum, decision_statistics, figure_path, train
 
 QUICK = '--quick' in sys.argv
+HYBRID = '--hybrid' in sys.argv  # train the hybrid variant instead of plain DeepQCD (results saved separately)
 SEEDS = 1 if QUICK else 3
 N_TRAIN = 200 if QUICK else 2000
 N_TEST = 100 if QUICK else 600
@@ -129,6 +134,80 @@ class MEWMA:
         return out
 
 
+class STALTA:
+    """Seismology's standard trigger: short-term over long-term average of signal energy (0.5 s / 10 s EWMAs at
+    100 Hz). The long-term average starts at the known noise energy, as on a running station."""
+
+    def __init__(self, pre, sta=50, lta=1000):
+        self.e0 = float(np.median((pre.astype(np.float64) ** 2).sum(1)))  # robust: a few traces are very loud
+        self.a, self.b, self.h = 1 / sta, 1 / lta, None
+
+    def reset(self, n):
+        self.s, self.l = np.full(n, self.e0), np.full(n, self.e0)
+
+    def __call__(self, x):
+        e = (x.astype(np.float64) ** 2).sum(2)
+        out = np.empty(e.shape)
+        for t in range(e.shape[1]):
+            self.s += self.a * (e[:, t] - self.s)
+            self.l += self.b * (e[:, t] - self.l)
+            out[:, t] = self.s / self.l
+        return out
+
+
+class FreezeIndex:
+    """Moore et al. (2008) / Baechlin et al. (2010) freeze index for gait: power in the 3-8 Hz 'freeze' band over
+    power in the 0.5-3 Hz locomotion band, over the trailing 4 s of the vertical axis (32 Hz)."""
+
+    def __init__(self, pre, fs=32, win=128, axis=1):
+        f = np.fft.rfftfreq(win, 1 / fs)
+        self.fb, self.lb = (f >= 3) & (f <= 8), (f >= 0.5) & (f < 3)
+        self.win, self.axis, self.h = win, axis, None
+
+    def reset(self, n):
+        self.tail = np.zeros((n, self.win - 1))
+
+    def __call__(self, x):
+        v = np.concatenate([self.tail, x[:, :, self.axis].astype(np.float64)], 1)
+        self.tail = v[:, -(self.win - 1):]
+        w = np.lib.stride_tricks.sliding_window_view(v, self.win, axis=1)  # (n, L, win)
+        w = w - w.mean(2, keepdims=True)
+        p = np.abs(np.fft.rfft(w * np.hanning(self.win), axis=2)) ** 2
+        return np.log((p[..., self.fb].sum(2) + 1e-9) / (p[..., self.lb].sum(2) + 1e-9))
+
+
+class SelfRefMEWMA:
+    """A chart that calibrates itself on each stream: mean and variance (per feature) from the first `burn`
+    observations of the stream, then a diagonal MEWMA against that baseline. Needs no training data at all,
+    and is the natural rival when every stream has its own normal (here: each typist)."""
+
+    def __init__(self, pre, burn=15, lam=0.2):
+        self.burn, self.lam, self.h = burn, lam, None
+
+    def reset(self, n):
+        self.buf, self.t, self.z = [], 0, None
+
+    def __call__(self, x):
+        x = x.astype(np.float64)
+        out = np.zeros(x.shape[:2])
+        for t in range(x.shape[1]):
+            if self.t < self.burn:
+                self.buf.append(x[:, t])
+                if self.t == self.burn - 1:
+                    b = np.stack(self.buf, 1)
+                    self.mu, self.sd = b.mean(1), b.std(1) + 0.1
+                    self.z = np.zeros_like(self.mu)
+            else:
+                self.z = self.lam * (x[:, t] - self.mu) / self.sd + (1 - self.lam) * self.z
+                out[:, t] = (self.z ** 2).mean(1) * (2 - self.lam) / self.lam
+            self.t += 1
+        return out
+
+
+DOMAIN = {'stalta': ('STA/LTA trigger', STALTA), 'freeze_index': ('Freeze index', FreezeIndex),
+          'selfref': ('Self-calibrating chart', SelfRefMEWMA)}
+
+
 # ---------------------------------------------------------------- evaluation
 
 def tradeoff(dstat, tau, length):
@@ -159,6 +238,21 @@ def at_level(pfa, val, level, add):
         return np.nan
     i = np.flatnonzero(ok)[np.argmin(add[ok])]
     return float(val[i])
+
+
+# ---------------------------------------------------------------- hybrid DeepQCD
+
+def hybrid_features(x, m, llr, mewma, burn=20):
+    """Inputs of the hybrid variant: the observations, the observations re-referenced to the stream's own
+    first `burn` steps (causal running mean until then), the fitted log-LR and log(1 + MEWMA T^2). The LSTM
+    starts from what the classical charts already know and only has to learn what they miss."""
+    xm = x * m[..., None]
+    k = np.minimum(np.arange(x.shape[1]), burn - 1)
+    c = np.cumsum(xm, 1)[:, k] / (k + 1)[None, :, None]  # mean of the first min(t, burn) steps
+    l = np.clip(llr(x.astype(np.float64), None), -50, 50) / 10
+    t2 = np.log1p(decision_statistics(mewma, x)) / 3
+    f = np.concatenate([x, x - c, l[..., None], t2[..., None]], 2)
+    return (f * m[..., None]).astype(np.float32)
 
 
 # ---------------------------------------------------------------- one dataset
@@ -198,17 +292,25 @@ def run(name):
     llr = GaussLLR(pre_n.astype(np.float64), post_n.astype(np.float64))
     stats['CUSUM (fitted Gaussians)'] = decision_statistics(Recursive(cusum, llr, None), xs)
     stats['MEWMA chart'] = decision_statistics(MEWMA(pre_n.astype(np.float64)), xs)
+    for key in d.extra:
+        label, cls = DOMAIN[key]
+        stats[label] = decision_statistics(cls(pre_n), xs)
     for name_, s in stats.items():
         curves[name_] = tradeoff(s, tau, length)
-    hidden = 16 if P <= 10 else 32
+    tag = 'DeepQCD-hybrid' if HYBRID else 'DeepQCD'
+    if HYBRID:
+        mew = MEWMA(pre_n.astype(np.float64))
+        xt, xv = hybrid_features(xt, mt, llr, mew), hybrid_features(xv, mv, llr, mew)
+        xs = hybrid_features(xs, ms, llr, mew)
+    hidden = 16 if xt.shape[2] <= 10 else 32
     for seed in range(SEEDS):
         torch.manual_seed(seed)
-        net = DeepQCD(P, hidden)
-        print(f'  DeepQCD seed {seed}: training on {len(xt)} windows of {xt.shape[1]} steps')
+        net = DeepQCD(xt.shape[2], hidden)
+        print(f'  {tag} seed {seed}: training on {len(xt)} windows of {xt.shape[1]} steps')
         train(net, xt, yt, xv, yv, epochs=EPOCHS, w=mt, wv=mv)
-        curves[f'DeepQCD #{seed}'] = tradeoff(decision_statistics(NetDetector(net, None), xs), tau, length)
+        curves[f'{tag} #{seed}'] = tradeoff(decision_statistics(NetDetector(net, None), xs), tau, length)
 
-    res = {'name': name, 'label': d.label, 'unit': d.unit, 'P': P, 'n_train_eps': len(d.train),
+    res = {'name': name, 'label': d.label, 'group': d.group, 'unit': d.unit, 'P': P, 'n_train_eps': len(d.train),
            'n_test_eps': len(d.test), 'H': d.H, 'notes': d.notes, 'detectors': {}}
     for k, (pfa, add, dr) in curves.items():
         res['detectors'][k] = {f'{lv}': {'ADD': at_level(pfa, add, lv, add), 'DR': at_level(pfa, dr, lv, add)}
@@ -219,20 +321,25 @@ def run(name):
 
 
 def summarize(res):
-    """DeepQCD seeds collapsed to the median (and range) at each level."""
+    """Seeds of each network (DeepQCD, DeepQCD-hybrid) collapsed to the median (and range) at each level."""
     rows = {}
-    seeds = [v for k, v in res['detectors'].items() if k.startswith('DeepQCD')]
-    for lv in map(str, LEVELS):
-        a = np.array([s[lv]['ADD'] for s in seeds], float)
-        r = np.array([s[lv]['DR'] for s in seeds], float)
-        rows.setdefault('DeepQCD', {})[lv] = {'ADD': np.nanmedian(a) if np.isfinite(a).any() else np.nan,
-                                              'lo': np.nanmin(a) if np.isfinite(a).any() else np.nan,
-                                              'hi': np.nanmax(a) if np.isfinite(a).any() else np.nan,
-                                              'DR': np.nanmedian(r) if np.isfinite(r).any() else np.nan}
+    fams = {}
     for k, v in res['detectors'].items():
-        if not k.startswith('DeepQCD'):
+        if ' #' in k:
+            fams.setdefault(k.split(' #')[0], []).append(v)
+        else:
             rows[k] = v
-    return rows
+    out = {}
+    for fam, seeds in fams.items():
+        for lv in map(str, LEVELS):
+            a = np.array([s_[lv]['ADD'] for s_ in seeds], float)
+            r = np.array([s_[lv]['DR'] for s_ in seeds], float)
+            ok = np.isfinite(a).any()
+            out.setdefault(fam, {})[lv] = {'ADD': np.nanmedian(a) if ok else np.nan,
+                                           'lo': np.nanmin(a) if ok else np.nan, 'hi': np.nanmax(a) if ok else np.nan,
+                                           'DR': np.nanmedian(r) if np.isfinite(r).any() else np.nan}
+    out.update(rows)
+    return out
 
 
 def print_table(res):
@@ -241,7 +348,7 @@ def print_table(res):
         line = f'  {k:28s}'
         for lv in map(str, LEVELS):
             line += f'          {v[lv]["ADD"]:7.1f} {v[lv]["DR"]:5.2f}'
-        if k == 'DeepQCD':
+        if 'lo' in v[str(LEVELS[0])]:
             line += '   (median of seeds; ADD range ' + ', '.join(
                 f'{v[str(lv)]["lo"]:.1f}-{v[str(lv)]["hi"]:.1f}' for lv in LEVELS) + ')'
         print(line)
@@ -251,15 +358,16 @@ def plot(figs, path):
     cols = min(4, len(figs))
     rows = int(np.ceil(len(figs) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4.2 * cols, 3.4 * rows), squeeze=False)
-    colors = {'CUSUM (fitted Gaussians)': 'C1', 'MEWMA chart': 'C2'}
+    colors = {'CUSUM (fitted Gaussians)': 'C1', 'MEWMA chart': 'C2', **{v[0]: 'C3' for v in DOMAIN.values()}}
     for ax, (res, curves) in zip(axes.flat, figs):
         for k, (pfa, add, dr) in curves.items():
             # threshold order (PFA falls, ADD rises), drawn as the achievable frontier: for any budget between
             # two operating points the next stricter one applies. PFA = 0 sits at the floor so it stays visible.
             deep = k.startswith('DeepQCD')
-            ax.plot(np.maximum(pfa, PFA_FLOOR), add, drawstyle='steps-pre', color='C0' if deep else colors[k],
-                    lw=1 if deep else 1.8,
-                    alpha=0.7 if deep else 1, label=('DeepQCD (3 seeds)' if k.endswith('#0') else None) if deep else k)
+            fam = k.split(' #')[0]
+            ax.plot(np.maximum(pfa, PFA_FLOOR), add, drawstyle='steps-pre',
+                    color=('C4' if 'hybrid' in k else 'C0') if deep else colors[k], lw=1 if deep else 1.8,
+                    alpha=0.7 if deep else 1, label=(f'{fam} (3 seeds)' if k.endswith('#0') else None) if deep else k)
         ax.set_xscale('log')
         ax.set_xlim(1, PFA_FLOOR)
         ax.set_xticks([1, 0.1, 0.01, PFA_FLOOR], ['1', '0.1', '0.01', '0'])
@@ -269,7 +377,8 @@ def plot(figs, path):
         ax.grid(alpha=0.3)
     for ax in list(axes.flat)[len(figs):]:
         ax.axis('off')
-    axes.flat[0].legend(fontsize=7)
+    for ax in list(axes.flat)[:len(figs)]:
+        ax.legend(fontsize=6)
     fig.tight_layout()
     fig.savefig(path, dpi=110)
     print(f'\nSaved {path}')
@@ -286,6 +395,12 @@ def report():
         res = json.load(open(p + '.json'))
         z = np.load(p + '.npz')
         curves = {k: tuple(z[f'{k}|{m}'] for m in ('pfa', 'add', 'dr')) for k in res['detectors']}
+        if os.path.exists(p + '.hybrid.json'):  # add the hybrid seeds from the --hybrid run
+            hres, hz = json.load(open(p + '.hybrid.json')), np.load(p + '.hybrid.npz')
+            for k in hres['detectors']:
+                if k.startswith('DeepQCD-hybrid'):
+                    res['detectors'][k] = hres['detectors'][k]
+                    curves[k] = tuple(hz[f'{k}|{m}'] for m in ('pfa', 'add', 'dr'))
         print(f'\n=== {res["label"]}  ({n})')
         print_table(res)
         figs.append((res, curves))
@@ -302,12 +417,13 @@ def main():
         res, curves = run(n)
         figs.append((res, curves))
         if not QUICK:
-            with open(os.path.join('runs', 'real', f'{n}.json'), 'w') as f:
+            stem = os.path.join('runs', 'real', n + ('.hybrid' if HYBRID else ''))
+            with open(stem + '.json', 'w') as f:
                 json.dump(res, f, indent=1, default=float)
-            np.savez(os.path.join('runs', 'real', f'{n}.npz'),
+            np.savez(stem + '.npz',
                      **{f'{k}|{m}': v for k, c in curves.items() for m, v in zip(('pfa', 'add', 'dr'), c)})
     # a full run draws the tracked summary figure; a subset only a scratch one (rebuild with --report)
-    full = len(names) == len(realdata.LOADERS) and not QUICK
+    full = len(names) == len(realdata.LOADERS) and not QUICK and not HYBRID
     plot(figs, figure_path('real.png') if full else os.path.join('runs', 'real', f'real_{"_".join(names)}.png'))
 
 
