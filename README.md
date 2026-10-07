@@ -5,11 +5,12 @@ A reproduction and stress test of **DeepQCD: An end-to-end deep learning approac
 synthetic experiments, a finance extension, and 21 real-data problems, with DeepQCD compared against classical
 detectors at matched false-alarm rates.
 
-## Bottom line
+## Takeaways
 
-DeepQCD is a sound method that the paper oversells. It is near-optimal when the data model is known. On
-real data it is a specialist, not a general replacement for classical change detectors.
+DeepQCD is a sound method that the paper oversells. It is near-optimal when the data model is known. On real
+data it is a specialist, not a general replacement for classical change detectors.
 
+**The paper's own claims:**
 - **Reproduced.** It is near-optimal in the Bayesian setting (Fig. 5), and within a few percent of the
   model-based detectors on AR(1) data (Figs. 7-8).
 - **Overstated.** The claim that it "beats CUSUM / SR" (Figs. 6, 8) holds only because the change is placed at
@@ -17,28 +18,130 @@ real data it is a specialist, not a general replacement for classical change det
   The transient result (Fig. 9) is a tie, not a win.
 - **Hidden cost.** Its false alarms come early: 10-21 % more before t = 500 than its average false-alarm period
   implies.
-- **On real data**, at PFA ≤ 0.1, against the best of a fitted-Gaussian CUSUM, MEWMA, Shewhart and each field's
-  standard rule:
-
-  | | wins | ties | nobody detects | losses |
-  |---|---|---|---|---|
-  | DeepQCD | 5 | 3 | 1 | 12 |
-  | DeepQCD-hybrid (ours) | 7 | 5 | 1 | 8 |
-
-  - It wins when the change is a *pattern* rather than a level shift, normal data is spiky or heavy-tailed,
-    and there are dozens to hundreds of labelled episodes. The standout is crypto pump-and-dump: 91-94 %
-    caught within ~5 s, against 53 % within ~28 s for the best classical chart. Bee dance and server
-    incidents (SMD) are also wins.
-  - It loses on abrupt jumps (earthquake onset, most plant faults, grid events: Shewhart or STA/LTA win by a
-    lot), with little data, and when each stream has its own normal.
 - **The paper's IoT application is easy.** On a real Mirai capture in the same 115 N-BaIoT features, every
   detector catches the attack within 1-2 packets; DeepQCD's edge is about one packet.
-- **Practical rule.**
-  - Use DeepQCD for pattern changes with plenty of labelled episodes.
-  - Use a Shewhart / MEWMA chart for abrupt shifts or small data.
-  - Use the hybrid when unsure: it is rarely worse than plain DeepQCD, with one exception (S&P 500).
 
-Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot trial: Jev, open models, Chronos).
+**On 21 real problems** (PFA ≤ 0.1, against the best classical detector on each):
+
+| | wins | ties | nobody detects | losses |
+|---|---|---|---|---|
+| DeepQCD | 5 | 3 | 1 | 12 |
+| DeepQCD-hybrid (ours) | 7 | 5 | 1 | 8 |
+
+- **DeepQCD wins** when the change is a *pattern* rather than a level shift, normal data is spiky or heavy-tailed,
+  and there are dozens to hundreds of labelled episodes:
+  - crypto pump-and-dump: 91-94 % caught within ~5 s, against 53 % within ~28 s for the best chart;
+  - bee dance: 0.80 vs 0.30;
+  - server incidents (SMD).
+- **It loses on:**
+  - abrupt jumps: earthquake onset, most plant faults, grid events, where Shewhart or STA/LTA win by a lot;
+  - small data: 7-20 training episodes;
+  - streams with their own normal: keystroke takeover, where a self-calibrating chart catches 97 %.
+- **The hybrid** (classical statistics fed into the network) is rarely worse than plain DeepQCD, with one
+  exception (S&P 500). It turns occupancy and C-MAPSS into wins.
+
+**Without labels (unsupervised):**
+- **Unsupervised detectors win on about two thirds of the problems**, often beating the supervised ones:
+  - Shewhart / MEWMA charts on normal data: Tennessee Eastman 0.90 vs DeepQCD 0.66, seismic 0.93 vs 0.27,
+    grid events 0.91 vs 0.73;
+  - a self-calibrating chart on keystrokes;
+  - zero-shot Chronos on SKAB, occupancy without light, and SMD.
+- **Labels pay off clearly only on distinctive change signatures:** pump-and-dump (0.91 vs 0.50), bee dance
+  (0.80 vs 0.47), NAB.
+- **Zero-shot Chronos** (no training at all) beats DeepQCD on seismic (0.84 vs 0.25) and grid events, but not
+  the Shewhart chart. It fails on slow level drifts: C-MAPSS, HAI, S&P 500, pump-and-dump.
+
+**Which detector to use:**
+
+| situation | use |
+|---|---|
+| abrupt jump in level or variance | Shewhart chart, or STA/LTA for seismic |
+| small persistent shift, only normal data | MEWMA chart |
+| each user / stream has its own normal | self-calibrating chart (baseline from the stream's own start) |
+| distinctive pattern, many labelled episodes | DeepQCD, or the hybrid |
+| unsure, labels available | DeepQCD-hybrid |
+| no data at all, subtle change in dynamics | Chronos zero-shot forecast surprise |
+
+Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot),
+`notes/datasets.md` (dataset survey).
+
+## What we did
+
+1. **Reproduced paper Sec. 5 in PyTorch.**
+   - Wrote the IID, AR(1) and transient experiments with the authors' architecture and protocol, and a
+     vectorized simulator that evaluates thousands of streams in minutes.
+   - The authors' notebooks call `predict` once per step; the cell-by-cell audit is in `notes/notebook-review.md`.
+2. **Probed the protocol.**
+   - Added the change at t = 200 (conditional ADD), which exposed the t = 1 start-up artifact.
+   - Wrote `detect.py`, which calibrates every detector to one false-alarm budget before measuring delays. It
+     revealed DeepQCD's front-loaded false alarms.
+3. **Finance extension.** A GARCH(1,1) volatility-regime change (`deepqcd_vol.py`): DeepQCD matches the
+   model-based detectors at matched false-alarm rates; feeding [r, r²] helps.
+4. **Surveyed ~40 real datasets** (`notes/datasets.md`): what a dataset needs for QCD, three ways to build
+   streams (native runs, splicing, annotated series), and pitfalls such as SKAB's fixed change index.
+5. **Real-data harness** (`realdata.py`, `deepqcd_real.py`): 21 problems reduced to one protocol, with random
+   change times, matched-PFA scoring, 3 seeds, and classical and domain rivals.
+   - Fixed along the way: Tennessee Eastman needed a second normal run; STA/LTA needed a robust noise level;
+     a Shewhart rival was added after it proved the strongest on abrupt changes.
+6. **Hybrid DeepQCD.** The LSTM also sees the fitted log-LR, the MEWMA statistic and the input re-referenced to
+   the stream's start: 7 wins instead of 5.
+7. **Zero-shot trial** (`zeroshot_qcd.py`): asked pretrained models for d_t with no training. Four backends:
+   - **Chronos:** run on all 21 datasets.
+   - **Qwen** (open LLM, P(yes) from logits): needs a GPU; a CPU spot check was poor.
+   - **TypeSafe Jev** and **OpenAI-compatible** endpoints: built and verified offline, not yet run (needs a
+     session with the API host reachable and a key).
+
+## Datasets
+
+| group | dataset | what changes | train / test episodes | source |
+|---|---|---|---|---|
+| synthetic | IID Gaussian, p = 7 | mean 0 → 1 | simulated | paper Sec. 5.1 |
+| | AR(1) | drift and correlation | simulated | paper Sec. 5.2 |
+| | transient | mean shift for ~25 steps | simulated | paper Sec. 5.3 |
+| | GARCH(1,1) | long-run volatility × 2 | simulated | ours |
+| industrial | Tennessee Eastman (Braatz) | 21 process faults | 42 / 21 | GitHub mirror |
+| | SKAB water pump | valve / pump faults | 20 / 14 | waico/SKAB |
+| | C-MAPSS FD001 | engine degradation (onset by convention) | 67 / 29 | NASA, GitHub mirror |
+| | UCI occupancy (± light sensor) | room becomes occupied | 7 / 12 | GitHub mirror |
+| security / IT | HAI 21.03 | ICS cyber-attacks | 30 / 20 | icsdataset/hai |
+| | SMD | server incidents, 38 metrics | 155 / 171 | NetManAIOps/OmniAnomaly |
+| | IoT Mirai (temporal / paper's IID splice) | botnet infection, N-BaIoT features | 300 / 150 | ymirsky/KitNET-py |
+| | account takeover | different typist (CMU keystrokes) | 600 / 300 | GitHub mirror |
+| finance | S&P 500 | 16 dated stress episodes | GARCH sim / 16 | GitHub mirror |
+| | crypto pump-and-dump | 317 Telegram pumps | 190 / 127 | SystemsLab-Sapienza |
+| science / health | seismic (PhaseNet) | earthquake P-wave arrival | 92 / 62 | AI4EPS/PhaseNet |
+| | freezing of gait (Daphnet) | Parkinson's freeze onset | 151 / 72 | GitHub mirror |
+| | pmuBAGE | power-grid events | 110 / 74 | NanpengYu/pmuBAGE |
+| benchmarks | NAB, TCPD, Yahoo S5 | labelled anomalies / change points | 63/46, 35/24, 32/20 | numenta, alan-turing-institute, KL-CPD |
+| | bee dance, HASC, fish kill | behaviour / activity / water-level changes | 74/43, 17/48, 25/15 | KL-CPD |
+
+All real data is GitHub-hosted and fetched by `fetch_data.sh`. Datasets on other hosts (N-BaIoT itself,
+UCF-Crime, the 500-run Tennessee Eastman, STEAD, CHB-MIT, ...) are listed in `notes/datasets.md`.
+
+## Methods
+
+Every detector is the generic QCD procedure: a state `s_t = phi(x_t, s_{t-1})`, a statistic `d_t = omega(s_t)`,
+and an alarm at the first `t` with `d_t >= h`. They differ in what `phi` and `omega` are, and in what they need.
+
+| method | architecture / rule | needs |
+|---|---|---|
+| **DeepQCD** | LSTM (16 units; 32 above 10 inputs) → Dense(10, ReLU) → Dense(1, sigmoid); BCE against 0/1 labels; Adam, early stopping | labelled change episodes |
+| **DeepQCD-hybrid** (ours) | same network; inputs = observations, observations minus the stream's own start, fitted log-LR, log(1 + MEWMA T²) | labelled change episodes |
+| Shiryaev / CUSUM / Shiryaev-Roberts | exact likelihood-ratio recursions (synthetic experiments, where the model is known) | the true pre/post densities |
+| CUSUM (fitted Gaussians) | CUSUM on the log-LR of two Gaussians fitted to pre- and post-change training data | labelled changes |
+| MEWMA chart | multivariate EWMA (λ = 0.1) of whitened observations, Hotelling T² | normal data only |
+| Shewhart chart | Hotelling T² of each observation (λ = 1) | normal data only |
+| self-calibrating chart | diagonal MEWMA against the stream's own first 15 observations | nothing |
+| STA/LTA | short / long-term energy ratio (seismology standard) | nothing |
+| freeze index | 3-8 Hz / 0.5-3 Hz power ratio (gait standard) | nothing |
+| window-limited CUSUM | max suffix sum of LLRs over the last K steps (transient changes) | the true densities |
+| rolling variance | 20-day variance of returns (finance) | nothing |
+| **Chronos-Bolt** (zero-shot) | Amazon's pretrained forecaster; CUSUM of squared quantile-normalized forecast errors | nothing |
+| **LLM decision** (zero-shot) | open LLM (Qwen) or OpenAI-compatible endpoint; P(Yes) from next-token logprobs on a JSON summary of the stream | nothing (API key for hosted) |
+| **TypeSafe Jev** (zero-shot) | "System One" decision model; typed yes/no question, probability returned | API key |
+
+All detectors on a dataset see the same test windows. They are compared at the threshold that meets the same
+false-alarm budget (PFA ≤ 0.05 / 0.1 / 0.25), never at equal thresholds.
 
 ## Layout
 
