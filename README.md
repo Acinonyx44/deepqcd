@@ -325,3 +325,12 @@ sigmoid. It trains end-to-end with binary cross-entropy against labels `0` befor
 after, so `d_t` learns to approximate `P(change already happened | x_1..x_t)`. The threshold `h` then sweeps
 the delay / false-alarm trade-off. Our hybrid also feeds the classical statistics into the network; the zero-shot
 trial asks pretrained models (Jev, open LLMs, Chronos) for the same probability with no training.
+
+## License
+
+Our code and notes are under the MIT License (`LICENSE`). Third-party material is not covered by it:
+
+- `paper/` is the published article, © 2024 The Franklin Institute / Elsevier, all rights reserved. It is
+  included for reference only.
+- `original/` is the paper authors' code, unmodified and unlicensed.
+- Datasets fetched into `data/` keep their sources' terms.
