@@ -82,7 +82,14 @@ CPU forecasting, past the session's job limit. `iot-mirai` at 200 windows took 1
 
 ### Qwen2.5-0.5B-Instruct (`hf` backend), 5 text datasets
 
-QWEN_STATUS
+Skipped on CPU. This machine manages about 700 prompts an hour, and the full run is about 17,000 prompts
+(5 datasets × 60 windows), or roughly 30 hours. It needs a GPU, where `zeroshot_qcd.py --backend hf` takes
+minutes. Answers are cached in `runs/zeroshot/hf-<dataset>.jsonl`, so a later run picks up any partial cache.
+
+One indicative point comes from a 15-window CPU pass on room occupancy. Qwen detected 0.07 at ADD 52.7 min,
+against 1.00 at ADD 2.1 min for CUSUM and 1.00 at ADD 2.8 min for DeepQCD on the same 15 windows. Fifteen windows
+is too few to draw conclusions, but a 0.5B model reading the raw readings as JSON did not pick up the obvious
+occupancy signal.
 
 ### Code changes made for this run
 
