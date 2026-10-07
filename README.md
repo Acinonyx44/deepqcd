@@ -65,6 +65,63 @@ data it is a specialist, not a general replacement for classical change detector
 Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot),
 `notes/datasets.md` (dataset survey).
 
+## Comparison tables
+
+### Synthetic experiments (paper Sec. 5, and GARCH)
+
+Model-based rivals know the true densities. Delays are in time steps; lower is better. Full runs are in `notes/results.md`.
+
+| experiment | setting | DeepQCD | best model-based | verdict |
+|---|---|---|---|---|
+| IID Gaussian, p = 7 | Bayesian ADD at PFA 0.01 | 2.49 | Shiryaev 2.41 | near-optimal (reproduced) |
+| | minimax ADD at FAP 1000, change at t = 1 | 0.06 | CUSUM 1.17 | "beats CUSUM" (paper's protocol) |
+| | minimax ADD at FAP 1000, change at t = 200 | 1.21 | CUSUM 1.11 | tie: the t = 1 win is a start-up artifact |
+| AR(1) | Bayesian ADD at PFA 0.01 | 7.68 | mod. Shiryaev 7.16 | within ~7 % |
+| | minimax ADD at FAP 1000, change at t = 200 | 4.51 | mod. SR 4.29 | ~5 % slower |
+| Transient (K = 25) | detection probability at PFA 0.1 | 0.833 | window-limited CUSUM 0.839 | tie (paper claims a win) |
+| GARCH volatility × 2 | Bayesian ADD at PFA 0.01, [r, r²] input | 71.2 days | GARCH Shiryaev 66.8 | within ~7 % |
+| | conditional ADD at FAP 1000, change at t = 200 | 26.6 days | IID CUSUM 26.0 | tie |
+
+### All 21 real-data problems
+
+Each cell is **detection rate · mean delay** (delay in the dataset's own step, misses counted as the full horizon)
+at the operating point with PFA ≤ 0.1, on the same test windows. DeepQCD and the hybrid are the median of 3 seeds.
+"Field rule" is the domain's standard detector where one exists. "Best" lists every detector within 0.03 in
+detection rate and 10 % in delay of the top one.
+
+| dataset | step | DeepQCD | DeepQCD-hybrid | CUSUM (fitted) | MEWMA | Shewhart | field rule | Chronos ⁱ | best |
+|---|---|---|---|---|---|---|---|---|---|
+| SKAB water pump | s | 0.09 · 116.7 | 0.20 · 101.1 | 0.21 · 99.7 | 0.28 · 93.1 | 0.23 · 98.9 | — | 0.34 · 88.4 | Chronos |
+| Tennessee Eastman (21 faults) | 3 min | 0.66 · 103.3 | 0.88 · 64.6 | 0.76 · 72.6 | 0.87 · 50.5 | 0.90 · 37.2 | — | 0.61 · 102.3 | Shewhart |
+| UCI room occupancy | min | 0.82 · 5.4 | 1.00 · 0.5 | 1.00 · 1.1 | 1.00 · 14.3 | 0.55 · 34.0 | — | 0.84 · 14.8 | hybrid |
+| UCI room occupancy (no light sensor) | min | 0.09 · 46.0 | 0.44 · 37.1 | 0.40 · 40.5 | 0.23 · 50.3 | 0.18 · 49.9 | — | 0.54 · 30.7 | Chronos |
+| C-MAPSS FD001 turbofans | cycle | 1.00 · 45.1 | 1.00 · 34.6 | 1.00 · 49.8 | 1.00 · 51.0 | 1.00 · 87.4 | — | 0.31 · 111.5 | hybrid |
+| SMD server machines | min | 0.18 · 22.6 | 0.17 · 22.5 | 0.02 · 29.7 | 0.03 · 27.9 | 0.10 · 26.4 | — | 0.17 · 23.2 | DeepQCD ≈ hybrid ≈ Chronos |
+| HAI 21.03 ICS attacks | s | 0.84 · 30.3 | 0.94 · 28.9 | 0.90 · 29.9 | 0.94 · 29.7 | 0.80 · 42.5 | — | 0.31 · 79.1 | hybrid ≈ MEWMA |
+| NAB (58 series) | step | 0.16 · 84.0 | 0.11 · 89.7 | 0.29 · 72.5 | 0.14 · 85.9 | 0.14 · 85.8 | — | 0.09 · 92.6 | CUSUM |
+| TCPD (univariate, consensus CPs) | step | 0.27 · 17.8 | 0.27 · 17.7 | 0.27 · 17.8 | 0.27 · 17.5 | — | — | 0.09 · 21.4 | MEWMA ≈ hybrid ≈ CUSUM … |
+| Bee waggle dance (6 seqs) | frame | 0.80 · 15.1 | 0.78 · 14.6 | 0.24 · 22.7 | 0.30 · 22.2 | 0.13 · 24.5 | — | 0.47 · 19.6 | DeepQCD ≈ hybrid |
+| HASC accelerometer activities | sample | 0.00 · 89.9 | 0.00 · 89.8 | 0.13 · 83.4 | 0.02 · 88.2 | 0.07 · 86.5 | — | 0.15 · 82.7 | Chronos ≈ CUSUM |
+| Dam water level (fish kills) | step | 0.00 · 15.8 | 0.00 · 16.1 | 0.01 · 15.6 | 0.00 · 16.3 | 0.00 · 16.3 | — | 0.06 · 15.4 | none detect |
+| Yahoo S5 subset (15 series) | hour | 0.17 · 2.5 | 0.15 · 2.5 | 0.17 · 2.6 | 0.06 · 2.8 | 0.17 · 2.4 | — | 0.14 · 2.0 | Shewhart ≈ DeepQCD ≈ CUSUM … |
+| pmuBAGE grid events | 1/30 s | 0.73 · 39.9 | 0.85 · 29.3 | 0.88 · 21.2 | 0.91 · 17.4 | 0.66 · 45.0 | — | 0.97 · 10.5 | Chronos |
+| S&P 500 stress episodes | day | 0.86 · 15.6 | 0.73 · 22.9 | 0.93 · 8.7 | 0.86 · 14.0 | 0.86 · 12.4 | — | 0.47 · 37.1 | CUSUM |
+| Seismic P-wave onset (PhaseNet) | 10 ms | 0.27 · 235.1 | 0.46 · 191.1 | 0.20 · 250.1 | 0.75 · 122.0 | 0.93 · 46.8 | STA/LTA 0.81 · 88.3 | 0.84 · 75.0 | Shewhart |
+| Freezing of gait (Daphnet) | 1/32 s | 0.18 · 101.5 | 0.26 · 95.2 | 0.28 · 98.1 | 0.00 · 115.3 | 0.09 · 113.7 | Freeze 0.20 · 103.3 | 0.02 · 114.4 | CUSUM ≈ hybrid |
+| Crypto pump-and-dump | 5 s chunk | 0.91 · 1.3 | 0.94 · 0.9 | 0.53 · 5.7 | 0.42 · 7.0 | 0.50 · 5.9 | — | 0.04 · 11.5 | hybrid ≈ DeepQCD |
+| Account takeover (keystrokes) | entry | 0.43 · 29.2 | 0.91 · 8.0 | 0.15 · 37.3 | 0.10 · 37.8 | 0.08 · 38.3 | Self-calibrating 0.97 · 5.7 | 0.71 · 13.4 | Self-calibrating |
+| IoT Mirai botnet (temporal blocks) | packet | 1.00 · 1.4 | 1.00 · 1.3 | 1.00 · 1.7 | 1.00 · 3.3 | 1.00 · 2.2 | — | 0.60 · 139.1 | hybrid ≈ DeepQCD ≈ CUSUM |
+| IoT Mirai botnet (paper protocol: IID splice) | packet | 1.00 · 0.2 | 1.00 · 0.2 | 1.00 · 1.1 | 1.00 · 1.2 | 1.00 · 1.3 | — | 0.86 · 59.6 | hybrid ≈ DeepQCD |
+
+ⁱ Chronos was run separately (`notes/zeroshot.md`): on the first 200 of the same test windows (100 for the IID
+IoT set), and allowed to alarm only every few steps, which costs it a little delay compared with the full-rate
+detectors.
+
+What needs what:
+- **Labelled changes:** DeepQCD, the hybrid, and the fitted CUSUM.
+- **Normal data only:** MEWMA and Shewhart.
+- **No training data:** the field rules and Chronos.
+
 ## What we did
 
 1. **Reproduced paper Sec. 5 in PyTorch.**
