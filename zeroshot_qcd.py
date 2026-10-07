@@ -295,9 +295,12 @@ def text_statistic(name, xs, length, stride, d):
         return None
     t0 = time.time()
     states = [r.get('state') or json.loads(r['messages'][1]['content'].split('\n\nQuestion:')[0]) for r in reqs]
-    new = [mock_answer(states[j]) for j in todo] if MOCK else backend.answer_many([reqs[j] for j in todo])
-    for j, v in zip(todo, new):
-        cache.put(keys[j], v)
+    # answered and cached in chunks, so an interrupted run keeps what it has done
+    for c in range(0, len(todo), 256):
+        part = todo[c:c + 256]
+        new = [mock_answer(states[j]) for j in part] if MOCK else backend.answer_many([reqs[j] for j in part])
+        for j, v in zip(part, new):
+            cache.put(keys[j], v)
     print(f'  {len(reqs)} answers ({len(todo)} new) in {time.time() - t0:.0f}s')
     dz = np.full(xs.shape[:2], -np.inf)
     for (i, t), k in zip(times, keys):
@@ -331,8 +334,10 @@ def chronos_statistic(xs, length, stride, min_context=16, cap=25.0, drift=2.0):
             half = np.repeat(1.2816 * ctx[:, -30:].std(1, keepdims=True), stride, 1)
             q10, q50, q90 = med - half, med, med + half
         else:
-            q, _ = pipe.predict_quantiles(torch.as_tensor(ctx[:, -2048:]), prediction_length=stride,
-                                          quantile_levels=[0.1, 0.5, 0.9])
+            # chunked so many-feature datasets (IoT: windows x 100+ features) stay within memory
+            q = torch.cat([pipe.predict_quantiles(torch.as_tensor(c[:, -2048:]), prediction_length=stride,
+                                                  quantile_levels=[0.1, 0.5, 0.9])[0]
+                           for c in np.array_split(ctx, -(-len(ctx) // 2048))])
             q10, q50, q90 = (q[..., k].numpy() for k in range(3))
         scale = np.maximum((q90 - q10) / 2.563, 1e-3)
         blk = xs[act, a:t + 1].transpose(0, 2, 1).reshape(-1, stride)
