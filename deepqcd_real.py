@@ -267,10 +267,10 @@ def hybrid_features(x, m, llr, mewma, burn=20, chunk=100):
 
 # ---------------------------------------------------------------- one dataset
 
-def run(name):
-    t0 = time.time()
+def prepare(name):
+    """Load a dataset and cut its standardized training, validation and test windows (seeded, so every
+    caller sees the same windows). Returns a dict; see the keys below."""
     d = realdata.LOADERS[name]()
-    print(f'\n=== {d.label}  ({name}; {len(d.train)} train / {len(d.test)} test episodes; {d.notes})')
     rng = np.random.default_rng(0)
     P = d.test[0][0].shape[1]
 
@@ -296,8 +296,13 @@ def run(name):
     # test windows: every test episode in turn, each with fresh pre-change lengths
     xs, _, ms, tau, length = windows(d.test, N_TEST, np.random.default_rng(1), d, cycle=True)
     xs = norm(xs) * ms[..., None]
+    return dict(d=d, P=P, xt=xt, yt=yt, mt=mt, xv=xv, yv=yv, mv=mv, pre_n=pre_n, post_n=post_n,
+                xs=xs, ms=ms, tau=tau, length=length, mu=mu, sd=sd)
 
-    curves = {}
+
+def rivals(p):
+    """Decision statistics of the classical detectors on the test windows, fitted on the training windows."""
+    d, pre_n, post_n, xs = p['d'], p['pre_n'], p['post_n'], p['xs']
     stats = {}
     llr = GaussLLR(pre_n.astype(np.float64), post_n.astype(np.float64))
     stats['CUSUM (fitted Gaussians)'] = decision_statistics(Recursive(cusum, llr, None), xs)
@@ -306,6 +311,19 @@ def run(name):
     for key in d.extra:
         label, cls = DOMAIN[key]
         stats[label] = decision_statistics(cls(pre_n), xs)
+    return stats, llr
+
+
+def run(name):
+    t0 = time.time()
+    p = prepare(name)
+    d, P = p['d'], p['P']
+    print(f'\n=== {d.label}  ({name}; {len(d.train)} train / {len(d.test)} test episodes; {d.notes})')
+    xt, yt, mt, xv, yv, mv = (p[k] for k in ('xt', 'yt', 'mt', 'xv', 'yv', 'mv'))
+    pre_n, xs, ms, tau, length = (p[k] for k in ('pre_n', 'xs', 'ms', 'tau', 'length'))
+
+    curves = {}
+    stats, llr = rivals(p)
     for name_, s in stats.items():
         curves[name_] = tradeoff(s, tau, length)
     if RIVALS:  # merge the rivals into the saved run, leaving the trained networks' curves as they are

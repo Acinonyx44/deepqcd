@@ -32,6 +32,8 @@ notes/results.md      the numbers from all full runs, what reproduces, what does
 notes/datasets.md     real datasets (mostly on GitHub) that fit the recipe, how to turn each into QCD streams, pitfalls
 realdata.py           loaders reducing 21 real problems (15 benchmarks, 6 new applications) to change episodes
 deepqcd_real.py       DeepQCD (and a hybrid variant) vs CUSUM, MEWMA, Shewhart and field-standard rules -> figures/real.png
+jev_qcd.py            trial: TypeSafe AI's Jev decision model as a zero-shot d_t (needs API access; --mock, --estimate)
+notes/jev.md          the Jev trial: idea, protocol, cost estimate, how to run it
 notes/realdata.md     real-data scorecard: where DeepQCD works (5 wins, hybrid 7), where not (12 / 8 losses), vs the paper
 notes/workflow.md     the exact train/test workflow from the paper (Algs. 1 and 2), mapped to this code
 tests/test_qcd.py     checks of qcd.py against slow reference implementations (chunking, LRs, first crossings)
