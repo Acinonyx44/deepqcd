@@ -38,7 +38,7 @@ real data it is a specialist, not a general replacement for classical change det
   - Use a Shewhart / MEWMA chart for abrupt shifts or small data.
   - Use the hybrid when unsure: it is rarely worse than plain DeepQCD, with one exception (S&P 500).
 
-Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/jev.md` (Jev trial).
+Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot trial: Jev, open models, Chronos).
 
 ## Layout
 
@@ -68,13 +68,13 @@ real data
   fetch_data.sh       downloads all real datasets into data/ (all GitHub-hosted, ~1.1 GB, git-ignored)
   realdata.py         loaders: 21 problems (15 benchmarks, 6 new applications) reduced to change episodes
   deepqcd_real.py     DeepQCD and DeepQCD-hybrid vs CUSUM, MEWMA, Shewhart and field-standard rules
-  jev_qcd.py          trial: TypeSafe AI's Jev decision model as a zero-shot d_t (needs API access)
+  zeroshot_qcd.py     trial: pretrained models as a zero-shot d_t (Jev, open LLM logits, OpenAI-compatible, Chronos)
 
 notes
   notes/results.md          synthetic results: what reproduces, what does not, and why
   notes/realdata.md         real-data scorecard, where DeepQCD works and where not, vs the paper's applications
   notes/datasets.md         survey of ~40 real datasets for QCD, how to turn each into streams, pitfalls
-  notes/jev.md              the Jev trial: idea, protocol, cost estimate, how to run it
+  notes/zeroshot.md         the zero-shot trial: backends, protocol, costs, how to run it
   notes/workflow.md         the paper's train/test workflow (Algs. 1-2) mapped to this code
   notes/notebook-review.md  cell-by-cell audit of the authors' Sec. 5 notebooks
 
@@ -87,6 +87,7 @@ figures/              output figures (tracked); runs/ holds logs, cached weights
 ```bash
 uv sync                      # .venv with torch / numpy / matplotlib (Python 3.12)
 uv sync --group realdata     # + scipy, for the real datasets' .mat files
+uv sync --group zeroshot     # + transformers, chronos-forecasting, for the zero-shot trial
 uv sync --group notebooks    # + JupyterLab, to open the original Sec. 5 notebooks
 ```
 
@@ -122,12 +123,15 @@ Real data:
 .venv/bin/python deepqcd_real.py --rivals     # recompute only the classical rivals into the saved runs
 ```
 
-Jev trial (zero-shot; needs `api.typesafe.ai` reachable and `TYPESAFE_API_KEY` set):
+Zero-shot trial (pretrained models, no training; needs the model hosts reachable, see `notes/zeroshot.md`):
 
 ```bash
-.venv/bin/python jev_qcd.py --estimate        # call count and cost (~$1.60 for all five datasets), no API
-.venv/bin/python jev_qcd.py --mock            # plumbing check with a labelled local stand-in, no API
-.venv/bin/python jev_qcd.py occupancy pumpdump
+uv sync --group zeroshot                                        # transformers, chronos-forecasting
+.venv/bin/python zeroshot_qcd.py --backend chronos              # Amazon Chronos-Bolt, all 21 datasets, no key
+.venv/bin/python zeroshot_qcd.py --backend hf                   # open LLM, P(yes) from logits, no key
+.venv/bin/python zeroshot_qcd.py --backend jev --estimate       # TypeSafe Jev (TYPESAFE_API_KEY), ~$1.60
+.venv/bin/python zeroshot_qcd.py --backend openai occupancy     # any OpenAI-compatible endpoint (OPENAI_API_KEY)
+.venv/bin/python zeroshot_qcd.py --backend hf --mock            # plumbing check, labelled stand-in, no network
 ```
 
 Everything:
@@ -159,5 +163,5 @@ Every quickest-change-detection procedure is `s_t = phi(x_t, s_{t-1})`, `d_t = o
 known pre-/post-change densities. DeepQCD makes `phi` a recurrent layer and `omega` a dense head with a
 sigmoid. It trains end-to-end with binary cross-entropy against labels `0` before the change-point and `1`
 after, so `d_t` learns to approximate `P(change already happened | x_1..x_t)`. The threshold `h` then sweeps
-the delay / false-alarm trade-off. Our hybrid also feeds the classical statistics into the network; the Jev
-trial asks a decision model for the same probability zero-shot.
+the delay / false-alarm trade-off. Our hybrid also feeds the classical statistics into the network; the zero-shot
+trial asks pretrained models (Jev, open LLMs, Chronos) for the same probability with no training.

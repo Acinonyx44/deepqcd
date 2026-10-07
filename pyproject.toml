@@ -12,3 +12,7 @@ dependencies = [
 [dependency-groups]
 notebooks = ["jupyterlab>=4.2", "ipykernel"]
 realdata = ["scipy>=1.13"]          # .mat files of the KL-CPD datasets (deepqcd_real.py)
+zeroshot = [
+    "chronos-forecasting>=2.0",
+    "transformers>=4.45",
+]
