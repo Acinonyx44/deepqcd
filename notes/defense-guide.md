@@ -169,6 +169,41 @@ Panels to point at:
   the session) wins by far.
 - **IoT Mirai:** everyone's delay is near 0. The attack is easy to detect.
 
+Why `real.png` is not smooth like the paper's curves:
+
+- The paper averages thousands of simulated or resampled streams. We test on the real recordings that exist.
+- Each curve is drawn as exact steps, without smoothing.
+- A missed change counts as the full horizon, which makes the flat ceilings.
+- Every episode has its own p and q (a different machine, user or fault).
+
+### 5.7 `figures/real_tau1.png`: the same 21 datasets under the paper's own protocol
+
+This is the answer to "why don't your real-data charts look like the paper's?". We reran every dataset exactly
+the way the paper runs N-BaIoT (Sec. 6.2):
+
+- **The data is shuffled.** Every normal row goes into a "normal" bag and every changed row into a "changed" bag.
+  Test streams are built by drawing rows at random from the bags.
+- **False alarms use τ = ∞.** These streams use only the normal bag, and never change.
+- **Delay uses τ = 1.** These streams use only the changed bag, so the very first observation is already
+  post-change. "τ = 1" means the stream starts inside the anomaly.
+- **The axes match the paper's Fig. 15.** x = FAP (mean steps to a false alarm, log scale), y = ADD.
+
+What it shows:
+
+- **The curves are smooth like the paper's,** because the bags can be resampled forever.
+- **DeepQCD now wins 13 of 21 datasets** at FAP 100, compared with 5 of 21 on the real ordered recordings. Same
+  data, same network, same rivals; only the protocol changed.
+- **Why it gains.** Shuffling turns each dataset into an exact IID p → q problem. The network only has to tell
+  q-rows from p-rows, and it can learn q's real shape, which a single Gaussian can't. What made real data hard is
+  gone: slow drifts, bursts of correlated normal data, and the order in which a fault develops.
+- **Where it still loses:** keystrokes (the change is in the order of entries), Yahoo, and at strict FAP SKAB and
+  fish kill.
+
+The sentence to say: "Under the paper's own protocol I reproduce the paper's kind of result on almost every
+dataset. When the data keeps its real time order and the change comes after real normal data, it reverses on
+most of them. The protocol, not the network, makes most of the difference." Details are in
+`notes/realdata-tau1.md`.
+
 ## 6. The real-data results (the big table in the README)
 
 **How we made it fair:**
