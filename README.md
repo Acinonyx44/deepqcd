@@ -63,7 +63,8 @@ data it is a specialist, not a general replacement for classical change detector
 | no data at all, subtle change in dynamics | Chronos zero-shot forecast surprise |
 
 Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot),
-`notes/datasets.md` (dataset survey).
+`notes/datasets.md` (dataset survey). A plain-language walkthrough of every chart, with likely questions and
+answers, is in `notes/defense-guide.md`.
 
 ## Comparison tables
 
