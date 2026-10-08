@@ -24,6 +24,7 @@ run vol_sq    deepqcd_vol.py --sq
 if [ -d data/SKAB ]; then  # real datasets: ./fetch_data.sh first
     run real deepqcd_real.py
     run real_hybrid deepqcd_real.py --hybrid
+    run real_tau1 deepqcd_tau1.py
 fi
 for src in iid ar garch; do
     run "detect_${src}_tau500" detect.py --source "$src" --tau 500 --fap 1000 "$@"

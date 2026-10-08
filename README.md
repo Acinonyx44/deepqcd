@@ -28,6 +28,10 @@ data it is a specialist, not a general replacement for classical change detector
 | DeepQCD | 5 | 3 | 1 | 12 |
 | DeepQCD-hybrid (ours) | 7 | 5 | 1 | 8 |
 
+**The protocol decides most of this.** Rerunning the same 21 datasets the paper's way (rows shuffled into IID
+streams, delay at τ = 1, false alarms at τ = ∞; `notes/realdata-tau1.md`, `figures/real_tau1.png`) gives smooth,
+paper-like curves, and DeepQCD then wins 13 and loses 2 (at FAP 100). Same data, same network, same rivals.
+
 - **DeepQCD wins** when the change is a *pattern* rather than a level shift, normal data is spiky or heavy-tailed,
   and there are dozens to hundreds of labelled episodes:
   - crypto pump-and-dump: 91-94 % caught within ~5 s, against 53 % within ~28 s for the best chart;
@@ -63,7 +67,8 @@ data it is a specialist, not a general replacement for classical change detector
 | no data at all, subtle change in dynamics | Chronos zero-shot forecast surprise |
 
 Details: `notes/results.md` (synthetic), `notes/realdata.md` (real data), `notes/zeroshot.md` (zero-shot),
-`notes/datasets.md` (dataset survey).
+`notes/datasets.md` (dataset survey). A plain-language walkthrough of every chart, with likely questions and
+answers, is in `notes/defense-guide.md`.
 
 ## Comparison tables
 
@@ -228,11 +233,13 @@ real data
   fetch_data.sh       downloads all real datasets into data/ (all GitHub-hosted, ~1.1 GB, git-ignored)
   realdata.py         loaders: 21 problems (15 benchmarks, 6 new applications) reduced to change episodes
   deepqcd_real.py     DeepQCD and DeepQCD-hybrid vs CUSUM, MEWMA, Shewhart and field-standard rules
+  deepqcd_tau1.py     the same datasets under the paper's Sec. 6.2 protocol (IID resampling, tau = 1 / inf)
   zeroshot_qcd.py     trial: pretrained models as a zero-shot d_t (Jev, open LLM logits, OpenAI-compatible, Chronos)
 
 notes
   notes/results.md          synthetic results: what reproduces, what does not, and why
   notes/realdata.md         real-data scorecard, where DeepQCD works and where not, vs the paper's applications
+  notes/realdata-tau1.md    the same datasets under the paper's protocol, and why the verdict flips
   notes/datasets.md         survey of ~40 real datasets for QCD, how to turn each into streams, pitfalls
   notes/zeroshot.md         the zero-shot trial: backends, protocol, costs, how to run it
   notes/workflow.md         the paper's train/test workflow (Algs. 1-2) mapped to this code
@@ -281,6 +288,7 @@ Real data:
 .venv/bin/python deepqcd_real.py skab tep     # a subset
 .venv/bin/python deepqcd_real.py --report     # rebuild the table and figures/real.png from runs/real/
 .venv/bin/python deepqcd_real.py --rivals     # recompute only the classical rivals into the saved runs
+.venv/bin/python deepqcd_tau1.py              # paper protocol, ~1.5 h -> figures/real_tau1.png, runs/tau1/
 ```
 
 Zero-shot trial (pretrained models, no training; needs the model hosts reachable, see `notes/zeroshot.md`):
