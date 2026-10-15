@@ -159,6 +159,22 @@ normal blocks spliced together, with no change.
 | occupancy-nolight | 0.12 | 2.79 | 22.5x | 2.05 | 8 |
 | skab | 0.66 | 2.11 | 3.2x | 1.62 | 14 |
 
+### Distributions on real data
+
+On real data p and q are unknown. `python transient_real.py --dists` writes their empirical versions on the test
+split to `runs/transient_real/dists.json`: the scalar z and the sensor whose mean moves most between normal and
+event training data. The window-limited CUSUM assumes z ~ N(0, 1) before an event and N(mu, 1) during it, with mu
+fitted on training events.
+
+| dataset | z before: mean / sd (model 0 / 1) | model during: mu / sd | z during, test: mean / sd | most-changed sensor |
+|---|---|---|---|---|
+| hai | -0.01 / 0.97 | 11.79 / 1 | 4.33 / 6.74 | P1_LCV01D (3.16 sd) |
+| fog | -0.30 / 0.79 | 0.64 / 1 | 0.08 / 0.73 | ankle acceleration, lateral (0.55 sd) |
+| smd | 0.69 / 1.07 | 4.31 / 1 | 3.47 / 6.14 | metric 29 (2.08 sd) |
+| occupancy | 0.21 / 0.84 | 7.46 / 1 | 7.58 / 1.53 | light (5.67 sd) |
+| occupancy-nolight | 0.61 / 0.96 | 3.84 / 1 | 2.94 / 1.96 | CO2 (3.70 sd) |
+| skab | -0.14 / 1.42 | 2.57 / 1 | 3.02 / 8.91 | Volume Flow RateRMS (0.77 sd) |
+
 ### Findings
 
 - **No real dataset reproduces the paper's simulated edge under its own protocol** (blocks, tau1 = 1000, K = 25,

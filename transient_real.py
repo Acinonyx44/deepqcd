@@ -40,6 +40,7 @@ Two ways to form the test experiments:
 Run:  .venv/bin/python transient_real.py <dataset> <all|z> <seed>      -> runs/transient_real/<dataset>.<input>.s<seed>.json
       .venv/bin/python transient_real.py --survey                      -> runs/transient_real/survey.json
       .venv/bin/python transient_real.py --splice                      -> runs/transient_real/splice.json
+      .venv/bin/python transient_real.py --dists                       -> runs/transient_real/dists.json
       .venv/bin/python transient_real.py --table                       -> the results table of notes/transient-real.md
 """
 import json
@@ -272,6 +273,67 @@ def splice_check(n_rep=20, seed=0):
         json.dump(out, f, indent=1)
 
 
+def sensor_names(name, P):
+    """Column names of the observations each loader in realdata.py returns, in order."""
+    occ = ['temperature', 'humidity', 'light', 'CO2', 'humidity ratio']
+    if name == 'occupancy':
+        return occ
+    if name == 'occupancy-nolight':
+        return [c for c in occ if c != 'light']
+    if name == 'skab':
+        import glob as g
+        f = sorted(g.glob(realdata._path('SKAB', 'data', 'valve1', '*.csv')))[0]
+        return open(f).readline().strip().split(';')[1:9]
+    if name == 'fog':
+        return ['ankle acceleration, forward', 'ankle acceleration, vertical', 'ankle acceleration, lateral']
+    if name == 'hai':
+        import csv, gzip
+        with gzip.open(realdata._path('hai', 'train1.csv.gz'), 'rt') as fh:
+            r = csv.reader(fh)
+            head = next(r)[1:]
+            a = np.array([row[1:] for row in r], dtype=np.float64)
+        cols = [i for i, h in enumerate(head) if not h.startswith('attack')]
+        keep = a[:, cols].std(0) > 1e-6
+        return [head[c] for c, k in zip(cols, keep) if k]
+    return [f'metric {i + 1}' for i in range(P)]  # SMD metrics are anonymized
+
+
+def distributions(bins=60):
+    """The empirical pre-change (f0) and in-event (f1) distributions of each dataset, on the test split: the scalar z
+    that window_dec_stat sees (with the Gaussian model it assumes, fitted on the training split) and the sensor whose
+    mean moves most between normal and event training data (in standardized units)."""
+    out = {}
+    for name in DATASETS:
+        d = realdata.LOADERS[name]()
+        tr_norm, tr_ev, te_norm, te = pools(d)
+        norm = normalization(tr_norm)
+        tr_norm, tr_ev, te_norm = [[norm(x) for x in p] for p in (tr_norm, tr_ev, te_norm)]
+        te_ev = [norm(x[t:]) for x, t in te]
+        z, mu = projection(tr_norm, tr_ev)
+        a0, a1 = np.concatenate(tr_norm), np.concatenate(tr_ev)
+        shift = np.abs(a1.mean(0) - a0.mean(0)) / np.where(a0.std(0) > 1e-8, a0.std(0), 1)
+        j = int(np.argmax(shift))
+        names = sensor_names(name, a0.shape[1])
+        n0, n1 = np.concatenate(te_norm), np.concatenate(te_ev)
+
+        def hist(u0, u1):
+            lo, hi = np.quantile(np.r_[u0, u1], [0.005, 0.995])
+            if hi - lo < 1e-9:
+                lo, hi = lo - 1, hi + 1
+            edges = np.linspace(lo, hi, bins + 1)
+            h0, _ = np.histogram(u0, edges, density=True)
+            h1, _ = np.histogram(u1, edges, density=True)
+            st = lambda u: {'mean': float(u.mean()), 'sd': float(u.std()), 'n': int(len(u))}
+            return {'edges': np.round(edges, 4).tolist(), 'f0': np.round(h0, 5).tolist(), 'f1': np.round(h1, 5).tolist(),
+                    'out0': float(((u0 < lo) | (u0 > hi)).mean()), 'out1': float(((u1 < lo) | (u1 > hi)).mean()),
+                    's0': st(u0), 's1': st(u1)}
+        out[name] = {'mu_post': mu, 'z': hist(z(n0), z(n1)), 'z_train': {'s0': float(z(a0).std()), 'm1': float(z(a1).mean()), 's1': float(z(a1).std())},
+                     'sensor': names[j], 'sensor_shift': float(shift[j]), 'x': hist(n0[:, j], n1[:, j]), 'P': int(a0.shape[1])}
+        print(name, names[j], f'shift {shift[j]:.2f}', f"z test: normal {out[name]['z']['s0']}, event {out[name]['z']['s1']}", flush=True)
+    with open(os.path.join(OUT, 'dists.json'), 'w') as f:
+        json.dump(out, f)
+
+
 def table():
     """Markdown summary for notes/transient-real.md: max PD s.t. PFA <= alpha, DeepQCD (mean over seeds) / WL-CUSUM."""
     import glob
@@ -304,6 +366,8 @@ if __name__ == '__main__':
         print(table())
     elif sys.argv[1] == '--splice':
         splice_check()
+    elif sys.argv[1] == '--dists':
+        distributions()
     elif sys.argv[1] == '--survey':
         survey()
     else:

@@ -119,6 +119,17 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
   </table></div>
   <p>Sections 2–4 rerun the paper's Section 5 with this recipe, at the published settings and at a few others, to show how each figure changes with its parameters. Where the authors' notebooks saved their own output, those numbers are drawn on top as open circles. Sections 5–7 apply the same recipe, unchanged, to real recordings that satisfy the assumptions of the paper's transient section.</p>
   <p>Monte Carlo sizes follow the notebooks: Bayesian 10,000 streams; FAP 1,000 streams without a change (censored at 30,000 steps; FAP = observed time / alarms); delay at τ = 1 10,000 streams; delay at τ = 200 3,000 streams, conditional on no earlier alarm; transient 10,000 experiments. Code: <a href="https://github.com/Acinonyx44/deepqcd/tree/claude/awesome-allen-8e9wvl" target="_blank" rel="noopener">github.com/Acinonyx44/deepqcd</a> (branch <span class="mono">claude/awesome-allen-8e9wvl</span>). The authors' code is in <a href="https://github.com/Acinonyx44/deepqcd/tree/claude/awesome-allen-8e9wvl/original" target="_blank" rel="noopener"><span class="mono">original/</span></a>; the ports are <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/original_qcd.py" target="_blank" rel="noopener"><span class="mono">original_qcd.py</span></a> (tests in <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/tests/test_original_qcd.py" target="_blank" rel="noopener"><span class="mono">tests/test_original_qcd.py</span></a>); §2–4 run with <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/paper_sweep.py" target="_blank" rel="noopener"><span class="mono">paper_sweep.py</span></a>, §5–7 with <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/transient_real.py" target="_blank" rel="noopener"><span class="mono">transient_real.py</span></a>; all tables are in <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/notes/transient-real.md" target="_blank" rel="noopener"><span class="mono">notes/transient-real.md</span></a>; the datasets are downloaded by <a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/fetch_data.sh" target="_blank" rel="noopener"><span class="mono">fetch_data.sh</span></a>.</p>
+  <p>Table 2 lists the pre-change and post-change distributions, p = <i>f</i>₀ and q = <i>f</i>₁, of every experiment. In the paper's Section 5 both are chosen by the experimenter and given to the benchmark detectors, while DeepQCD sees only labelled samples. On real data neither is known: there are only labelled recordings (§6 shows their empirical distributions).</p>
+  <p class="cap">Distributions and change points in the paper's experiments and in this report.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Experiment</th><th class="w">p = <i>f</i>₀ (before)</th><th class="w">q = <i>f</i>₁ (after, or during)</th><th class="w">Change points: training → test</th><th class="w">Benchmark knows</th><th class="w">Also run here</th></tr>
+    <tr><td>§5.1 IID<br>Figs. 5, 6</td><td class="w">N(0, I₇)</td><td class="w">N(1₇, I₇)</td><td class="w">τ ~ geo(0.001), 3,200 streams × 2,000 → Bayesian: τ ~ geo(0.001); minimax: τ = ∞ (FAP), τ = 1 (ADD)</td><td class="w">p, q, ρ (Shiryaev); p, q (CUSUM, SR)</td><td class="w">N(0, I<sub>p</sub>) → N(μ1<sub>p</sub>, I<sub>p</sub>), p ∈ {1, 7}, μ ∈ {0.5, 1}; ADD also at τ = 200</td></tr>
+    <tr><td>§5.2 AR(1)<br>Figs. 7, 8</td><td class="w">x<sub>t</sub> = −0.3 x<sub>t−1</sub> + ε<sub>t</sub></td><td class="w">x<sub>t</sub> = 1 + 0.2 x<sub>t−1</sub> + ε<sub>t</sub></td><td class="w">as §5.1</td><td class="w">both conditional densities (Eq. 10)</td><td class="w">(μ₁, λ₁) ∈ {(1, 0.2), (0.5, 0.2), (1, 0.6)}</td></tr>
+    <tr><td>§5.3 transient<br>Fig. 9</td><td class="w">N(0, 1), before τ₁ and after τ₂</td><td class="w">N(1, 1) on [τ₁, τ₂)</td><td class="w">τ₁ ~ geo(0.001), τ₂ − τ₁ ~ geo(0.002), 3,200 × 3,000 → τ₁ = 1000, τ₂ = τ₁ + 25</td><td class="w">p, q and K (window-limited CUSUM)</td><td class="w">μ ∈ {0.5, 1, 2}; K ∈ {10, 25, 50}; τ₁ ∈ {200, 1000}</td></tr>
+    <tr><td>§6.1 video</td><td class="w">I3D features of normal surveillance frames</td><td class="w">features after an anomaly starts</td><td class="w">labelled anomaly in each video</td><td class="w">no model (Liu et al. benchmark)</td><td class="w">not rerun</td></tr>
+    <tr><td>§6.2 IoT</td><td class="w">N-BaIoT benign traffic, 115 features</td><td class="w">botnet attack traffic</td><td class="w">benign block then attack block → τ ∈ (768, 960] in streams of 1,024</td><td class="w">no model (fitted benchmarks)</td><td class="w">not rerun</td></tr>
+    <tr class="mid"><td>Real data<br>§5–7 here</td><td class="w">normal operation of each dataset: <b>unknown</b></td><td class="w">its labelled events: <b>unknown</b></td><td class="w">§5.3 generator with real blocks → τ₁ = 1000, K = 25</td><td class="w">a Gaussian model along z, fitted on training data</td><td class="w">τ₁ = 200; K = 10, 50; six datasets</td></tr>
+  </table></div>
 </section>
 
 
@@ -202,9 +213,27 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
     <li><b>C3</b> at least five test events are preceded by τ₁ − 1 + K = 1024 or more normal steps, so the paper's τ₁ = 1000 can be tested on real, unspliced data;</li>
     <li><b>C4</b> there are enough events for disjoint training and test sets (at least 5 each, lasting ≥ K).</li>
   </ol>
-  <p>Table 2 applies these conditions to every labelled dataset in the project. HAI and Daphnet meet all four. SMD fails C2 because most of its anomalies last under 25 minutes, so it is tested on the 60 test events that last at least K. Occupancy and SKAB fail C3. Occupancy has a loader in the authors' own code; it is used with all five sensors and again without the light sensor, which makes arrivals much harder to see. Before an arrival the office is empty overnight for about 14 hours, under 1,000 minutes, and SKAB runs last 20 minutes. At τ₁ = 1000 only the <i>blocks</i> construction of §6 can test these two, using the few long normal stretches available (one weekend for Occupancy) or, for SKAB, chained stretches from different runs. τ₁ = 200 is therefore reported as well. Change-point, persistent-fault and single-instant datasets fail C1 and are not used.</p>
+  <p>Table 3 applies these conditions to every labelled dataset in the project. HAI and Daphnet meet all four. SMD fails C2 because most of its anomalies last under 25 minutes, so it is tested on the 60 test events that last at least K. Occupancy and SKAB fail C3. Occupancy has a loader in the authors' own code; it is used with all five sensors and again without the light sensor, which makes arrivals much harder to see. Before an arrival the office is empty overnight for about 14 hours, under 1,000 minutes, and SKAB runs last 20 minutes. At τ₁ = 1000 only the <i>blocks</i> construction of §6 can test these two, using the few long normal stretches available (one weekend for Occupancy) or, for SKAB, chained stretches from different runs. τ₁ = 200 is therefore reported as well. Change-point, persistent-fault and single-instant datasets fail C1 and are not used.</p>
   <p class="cap">Eligibility of the labelled datasets. Each dataset name links to the GitHub repository it is downloaded from. Events are counted after the project's train/test split. "≥ K" counts test events lasting at least 25 steps; "≥ 1024 before" counts test events that also have at least 1024 normal steps before them.</p>
   <div class="tablewrap"><table id="survey"></table></div>
+  <h3>Data preparation</h3>
+  <p>Table 4 lists how each dataset is read and split (<a href="https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/realdata.py" target="_blank" rel="noopener"><span class="mono">realdata.py</span></a>). The same steps then apply to all of them:</p>
+  <ol class="tight">
+    <li>Each recording is cut at its labels into normal stretches and events. An event runs from its first to its last labelled step, and the normal data after it belongs to the next normal stretch. An event is used only if enough normal steps precede it (the minimum is in Table 4).</li>
+    <li>The normal pool is every normal stretch of the training split, plus any event-free recordings. The event pool is every training event, from its onset.</li>
+    <li>Every observation is standardized by the mean and standard deviation of the normal pool, as in the IoT code (<span class="mono">do_normalization</span>).</li>
+    <li>The scalar z for the window-limited CUSUM is fitted on the two training pools (§6).</li>
+    <li>Streams are then formed as in §6: training streams by the §5.3 generator, test streams as blocks or native.</li>
+  </ol>
+  <p class="cap">How each dataset is read and split before the common steps above.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Dataset</th><th class="w">Recording</th><th class="w">Observations x<sub>t</sub></th><th class="w">Events (label)</th><th class="w">Training / test split</th><th class="w">Dataset-specific steps</th></tr>
+    <tr><td>HAI 21.03</td><td class="w">industrial control testbed, 1 Hz; train1 (normal), test1–5</td><td class="w">57 sensors and actuators (constant ones dropped)</td><td class="w">attack intervals (<span class="mono">attack</span> column); ≥ 120 normal steps before</td><td class="w">attacks split 60 / 40 at random (30 / 20); train1 is normal training data</td><td class="w">standardized by train1, clipped to ±20</td></tr>
+    <tr><td>Daphnet</td><td class="w">10 Parkinson's patients walking, 64 Hz averaged to 32 Hz</td><td class="w">ankle accelerometer, 3 axes, in g</td><td class="w">freezing-of-gait episodes; ≥ 64 normal steps before</td><td class="w">patients split 6 / 4 (test patients unseen): 151 / 72 events</td><td class="w">—</td></tr>
+    <tr><td>SMD</td><td class="w">28 server machines, one reading per minute</td><td class="w">38 machine metrics</td><td class="w">labelled anomaly intervals; ≥ 30 normal steps before</td><td class="w">machines split 14 / 14 (test machines unseen): 155 / 171 events</td><td class="w">each machine standardized by its own unlabelled training file, clipped to ±10</td></tr>
+    <tr><td>SKAB</td><td class="w">water-circulation testbed, 1 Hz; 34 runs of about 20 min, plus one fault-free run</td><td class="w">8 sensors (vibration, current, pressure, temperature, voltage, flow)</td><td class="w">the valve or pump fault in each run (<span class="mono">anomaly</span> column); ≥ 20 normal steps before</td><td class="w">runs split 20 / 14 at random; the fault-free run is normal training data</td><td class="w">—</td></tr>
+    <tr><td>Occupancy</td><td class="w">one office, February 2015, one reading per minute</td><td class="w">temperature, humidity, light, CO₂, humidity ratio (4 without light)</td><td class="w">occupied periods (<span class="mono">Occupancy</span> column), gaps under 15 min closed; ≥ 10 min long, ≥ 10 normal steps before</td><td class="w">datatraining.txt / datatest.txt and datatest2.txt, the split of the authors' Occupancy script: 7 / 12 events</td><td class="w">time stamp not used as an input</td></tr>
+  </table></div>
 </section>
 
 <!-- ============================== 6 -->
@@ -213,6 +242,15 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
   <p><b>Training</b> uses the notebook's generator unchanged (N cell 7). It draws τ₁ ~ geo(0.001) and τ₂ − τ₁ ~ geo(0.002), then fills t &lt; τ₁ with a contiguous block of real normal training data, [τ₁, τ₂) with a real training event from its labelled onset, and t ≥ τ₂ with another normal block. This is the authors' IoT construction (<span class="mono">random_sample</span>) applied to the transient shape. A real event cannot last longer than it did, so τ₂ is moved to the event's end when the geometric draw runs past it. All inputs are standardized by the normal training data (<span class="mono">do_normalization</span>). The network (all sensors, as the IoT code feeds all 115 features) and its training are those of Table 1.</p>
   <p><b>Testing</b> follows N cells 19 and 22 with τ₁ = 1000 and K = 25, in two ways. <i>Blocks</i>, the authors' construction (<span class="mono">random_sample_eva</span>), runs 10,000 experiments; each has a normal test block of τ₁ − 1 + K steps (the first K start the CUSUM window) followed by the first K steps of a real test event. <i>Native</i> uses no splicing: each test event is preceded by its own recorded normal stretch, giving one experiment per event that has at least 1024 normal steps before it.</p>
   <p><b>Addition not in the original code.</b> <span class="mono">window_dec_stat</span> accumulates x − μ/2: the log-likelihood ratio of N(μ, 1) against N(0, 1), divided by μ. It needs a scalar with that model. Each multivariate observation is therefore mapped to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), where m₀ and C₀ are fitted on normal training data and m₁ on training events. Under Gaussian models with a common covariance, the log-likelihood ratio of x is exactly a linear function of z, z is N(0, 1) before the change, and μ is the mean of z over training events. <span class="mono">window_dec_stat</span> is then called unchanged. As a control, a second DeepQCD is trained on z alone, so the two detectors can also be compared on identical information.</p>
+  <h3>Distributions on real data</h3>
+  <p>On real data, p and q are unknown; there are only labelled samples. The figure below shows their empirical versions on the test split. One view is the scalar z, drawn with the two Gaussians that <span class="mono">window_dec_stat</span> assumes: N(0, 1) before the event and N(μ, 1) during it, fitted on the training split. The other view is the single sensor whose mean moves most between normal and event training data, in standardized units. Where the empirical curves depart from the dashed Gaussians, the window-limited CUSUM is using the wrong model. DeepQCD uses no model.</p>
+  <div class="controls">
+    <div class="ctl"><label for="dsds">dataset</label><select id="dsds"></select></div>
+    <div class="ctl"><span class="lab" id="dsvL">variable</span><span class="seg" role="group" aria-labelledby="dsvL" id="dsv"><button aria-pressed="true" data-v="z">z (input to window_dec_stat)</button><button aria-pressed="false" data-v="x">most-changed sensor</button></span></div>
+  </div>
+  <div class="legend"><span><i style="background:#BDBDBD;height:10px"></i>p: normal (before τ₁)</span><span><i style="background:#111"></i>q: event (on [τ₁, τ₂))</span><span id="dsGL"><i class="dash" style="color:#555"></i>Gaussians assumed by window_dec_stat</span></div>
+  <canvas class="chart tall" id="dsC" role="img" aria-label="Empirical distributions before and during events"></canvas>
+  <p class="read" id="dsRead"></p>
   <div class="controls">
     <div class="ctl"><label for="exds">dataset</label><select id="exds"></select></div>
     <div class="ctl"><span class="lab" id="exnL">example</span><span class="seg" role="group" aria-labelledby="exnL" id="exn"><button aria-pressed="true" data-v="0">1</button><button aria-pressed="false" data-v="1">2</button><button aria-pressed="false" data-v="2">3</button><button aria-pressed="false" data-v="3">4</button></span></div>
@@ -252,7 +290,7 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
   <p class="cap" id="rTabCap"></p>
   <div class="tablewrap"><table id="rTab"></table></div>
   <h3>Blocks versus native</h3>
-  <p>The two constructions can disagree sharply; Occupancy without the light sensor is the clearest case. The authors' block construction puts a normal block recorded at one time in front of an event recorded at another, so the data can jump at τ₁ even when the real event begins gently. Table 4 measures this jump. It is the distance between the mean of the 10 steps before τ₁ and the first 5 steps after it, in standardized units, for the real onset and for the spliced one. The last column is the same distance between two random normal blocks: a splice with no change at all.</p>
+  <p>The two constructions can disagree sharply; Occupancy without the light sensor is the clearest case. The authors' block construction puts a normal block recorded at one time in front of an event recorded at another, so the data can jump at τ₁ even when the real event begins gently. Table 6 measures this jump. It is the distance between the mean of the 10 steps before τ₁ and the first 5 steps after it, in standardized units, for the real onset and for the spliced one. The last column is the same distance between two random normal blocks: a splice with no change at all.</p>
   <p class="cap">Size of the step at τ₁ (median over test events, standardized units). Where "spliced" far exceeds "native", a detector can score in the blocks construction by noticing the splice rather than the event.</p>
   <div class="tablewrap"><table id="spTab"></table></div>
   <div class="grid2">
@@ -418,6 +456,36 @@ function upd6() {
   $('exRead').innerHTML = `${R.label}, one test stream built as in training: 300 normal steps, a whole real test event (${e.tau2 - e.tau1} ${R.unit} steps, cut at 400), then 200 normal steps. The x-axis counts ${R.unit} steps. DeepQCD (seed 0, all ${R.P} sensors) should rise inside the shaded event and fall after it ends. The window-limited CUSUM sees only z and forgets everything older than 25 steps. On this dataset the training events give μ = ${R.mu_post.toFixed(2)} in z units: ${R.mu_post > 3 ? 'events stand out clearly along z' : R.mu_post > 1 ? 'a moderate shift' : 'a weak mean shift, so a mean-change model captures little of what changes'}.`;
 }
 
+// ============================== §6 distributions
+$('dsds').innerHTML = names.map(n => `<option value="${n}">${D.real[n].label}</option>`).join('');
+const dsV = seg('dsv', upd6d); $('dsds').addEventListener('change', upd6d);
+const chDS = chart($('dsC'), (g, W, H) => {
+  const Q = D.dists && D.dists[$('dsds').value]; if (!Q) return pending(g, W, H);
+  const v = dsV(), h = Q[v], e = h.edges, n = e.length - 1;
+  const gauss = (x, m) => Math.exp(-0.5 * (x - m) * (x - m)) / Math.sqrt(2 * Math.PI);
+  let ymax = Math.max(...h.f0, ...h.f1);
+  if (v === 'z') for (let i = 0; i <= 200; i++) { const x = e[0] + (e[n] - e[0]) * i / 200; ymax = Math.max(ymax, gauss(x, 0), gauss(x, Q.mu_post)); }
+  const P = frame(g, W, H, { x0: e[0], x1: e[n], y0: 0, y1: ymax * 1.08, xlabel: v === 'z' ? 'z' : `${Q.sensor} (standardized)`, ylabel: 'density', ml: 50 });
+  // p: filled step histogram
+  g.fillStyle = '#D5D5D5'; g.beginPath(); g.moveTo(P.sx(e[0]), P.sy(0));
+  for (let i = 0; i < n; i++) { g.lineTo(P.sx(e[i]), P.sy(h.f0[i])); g.lineTo(P.sx(e[i + 1]), P.sy(h.f0[i])); }
+  g.lineTo(P.sx(e[n]), P.sy(0)); g.closePath(); g.fill();
+  // q: step line
+  g.strokeStyle = '#111'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(P.sx(e[0]), P.sy(0));
+  for (let i = 0; i < n; i++) { g.lineTo(P.sx(e[i]), P.sy(h.f1[i])); g.lineTo(P.sx(e[i + 1]), P.sy(h.f1[i])); }
+  g.lineTo(P.sx(e[n]), P.sy(0)); g.stroke();
+  if (v === 'z') { const xs = Array.from({ length: 301 }, (_, i) => e[0] + (e[n] - e[0]) * i / 300); line(g, P, xs, xs.map(x => gauss(x, 0)), '#777', 1.3, [5, 4]); line(g, P, xs, xs.map(x => gauss(x, Q.mu_post)), '#111', 1.3, [5, 4]); }
+  P.restore();
+});
+function upd6d() {
+  const name = $('dsds').value, Q = D.dists && D.dists[name], R = D.real[name]; render(chDS);
+  if (!Q) { $('dsRead').textContent = ''; return; }
+  const v = dsV(), h = Q[v]; $('dsGL').style.visibility = v === 'z' ? 'visible' : 'hidden';
+  const pct = x => (100 * x).toFixed(1) + '%';
+  if (v === 'z') $('dsRead').innerHTML = `${R.label}, test split. Before events, z has mean ${f2(h.s0.mean)} and standard deviation ${f2(h.s0.sd)}; the model assumes 0 and 1. During events, mean ${f2(h.s1.mean)} and standard deviation ${f2(h.s1.sd)}; the model assumes μ = ${f2(Q.mu_post)} and 1 (from training events). ${(h.out0 + h.out1) > 0.002 ? `The plot covers the central 99% of values; ${pct(h.out0)} of normal and ${pct(h.out1)} of event values lie outside it.` : ''}`;
+  else $('dsRead').innerHTML = `${R.label}, test split: <b>${Q.sensor}</b>, the sensor whose mean moves most between normal and event training data (by ${f2(Q.sensor_shift)} normal standard deviations, out of ${Q.P} inputs). Before events: mean ${f2(h.s0.mean)}, standard deviation ${f2(h.s0.sd)}; during events: mean ${f2(h.s1.mean)}, standard deviation ${f2(h.s1.sd)}.`;
+}
+
 // ============================== §7 results
 const rCon = seg('rcon', upd7), rK = seg('rk', upd7), rT = seg('rt', upd7), rIn = seg('rin', upd7); $('rds').addEventListener('change', upd7);
 function realEval(R, key, con) { // [deep curves..., wl curve, n]
@@ -472,6 +540,6 @@ function upd7() {
   for (const nm of names) { const r = D.splice[nm]; if (!r) continue; h += `<tr><td>${D.real[nm].label}</td><td class="num">${f2(r.native)}</td><td class="num">${f2(r.spliced)}</td><td class="num">${(r.spliced / r.native).toFixed(1)}×</td><td class="num">${f2(r.normal_splice)}</td><td class="num">${r.n_native}</td></tr>`; }
   $('spTab').innerHTML = h;
 })();
-upd2(); upd3(); upd4(); upd6(); upd7();
+upd2(); upd3(); upd4(); upd6d(); upd6(); upd7();
 })();
 </script>

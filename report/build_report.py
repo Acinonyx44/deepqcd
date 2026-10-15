@@ -77,6 +77,8 @@ def main():
             s['C3'] = s['native_1000'] >= 5
     sp = os.path.join(REPO, 'runs', 'transient_real', 'splice.json')
     D['splice'] = load(sp) if os.path.exists(sp) else None
+    dp = os.path.join(REPO, 'runs', 'transient_real', 'dists.json')
+    D['dists'] = load(dp) if os.path.exists(dp) else None
     for name in ORDER:
         runs = sorted(glob.glob(os.path.join(REPO, 'runs', 'transient_real', f'{name}.all.s*.json')))
         if not runs:
