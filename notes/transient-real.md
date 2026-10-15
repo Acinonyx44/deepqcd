@@ -45,13 +45,16 @@ The transient model f0 -> f1 -> f0 and the paper's test (tau1 = 1000, K = 25) re
 
 - **C1** labels that mark intervals which start and end, with normal data after them;
 - **C2** most events lasting at least K = 25 steps;
-- **C3** contiguous normal stretches of at least tau1 - 1 + K = 1024 steps in the test data;
+- **C3** at least five test events preceded by tau1 - 1 + K = 1024 or more normal steps (so tau1 = 1000 can be
+  tested without splicing);
 - **C4** at least 5 training and 5 test events lasting at least K.
 
 `python transient_real.py --survey` checks every labelled dataset in `realdata.py` and writes
 `runs/transient_real/survey.json`. The datasets used are:
 
-- HAI, Daphnet freezing of gait and SMD, which meet all four conditions;
+- HAI and Daphnet freezing of gait, which meet all four conditions;
+- SMD, which fails C2 (most anomalies last under 25 minutes) and is tested on its 60 test events that last at
+  least K;
 - Occupancy, with and without the light sensor (the authors ship a loader for it), and SKAB, which fail C3.
 
 Change-point, persistent-change and single-instant datasets fail C1. Fish kill and Yahoo fail C2.
@@ -77,4 +80,106 @@ Reproduce with `runs/run_jobs.sh` and `runs/run_jobs2.sh` (job lists in `runs/jo
 
 ## Results
 
-Runs in progress; the results table is added when they finish (`python transient_real.py --table`).
+Interactive version: `python report/build_report.py` builds `report/index.html` from the run outputs. It has
+toggles for every setting below and the paper's Figs. 5-9 at several parameters (Part I, `paper_sweep.py`).
+
+### Part I in one paragraph
+
+The authors' saved notebook outputs fall on our curves.
+- **Bayesian setting:** DeepQCD's ADD at PFA = 0.01 is within 6% of the optimal Shiryaev procedure (or its modified
+  AR version) in six of seven settings, and 16% above it for the weak AR drift mu1 = 0.5.
+- **Minimax setting, change at tau = 1 (the paper's protocol):** DeepQCD is far faster than CUSUM (ADD 0.04 vs 1.17
+  at FAP 1000, IID paper setting).
+- **Minimax setting, change at tau = 200:** DeepQCD is never more than 1% faster than CUSUM. It is 2-15% slower at
+  FAP 1000, about tied at FAP 10,000, and far slower at FAP 100.
+- **Transient, Fig. 9:** reproduces at the paper's setting (PD 0.87 vs 0.86 at PFA 0.05). The window-limited CUSUM
+  leads for mu = 0.5 (0.17 vs 0.12) and for K = 10.
+- **Notebook bug:** the minimax notebook as released copies one noise draw to all seven coordinates of the benchmark
+  data (cells 21, 23, 28, 30). The saved outputs match the correct generator, so the published figure is unaffected.
+
+### Part II tables
+
+**blocks, tau1 = 1000, K = 25** (max PD with PFA <= alpha; DeepQCD all sensors, mean of seeds / DeepQCD on z / WL-CUSUM)
+
+| dataset | n | alpha = 0.01 | alpha = 0.05 | alpha = 0.10 |
+|---|---|---|---|---|
+| hai | 10000 | 0.06 / 0.30 / 0.26 | 0.43 / 0.35 / 0.51 | 0.57 / 0.36 / 0.51 |
+| fog | 10000 | 0.04 / 0.00 / 0.00 | 0.06 / 0.02 / 0.00 | 0.06 / 0.04 / 0.00 |
+| smd | 10000 | 0.00 / 0.15 / 0.15 | 0.03 / 0.21 / 0.26 | 0.05 / 0.26 / 0.30 |
+| occupancy | 10000 | 0.93 / 1.00 / 1.00 | 0.95 / 1.00 / 1.00 | 0.95 / 1.00 / 1.00 |
+| occupancy-nolight | 10000 | 0.47 / 0.41 / 0.20 | 0.47 / 0.41 / 0.20 | 0.47 / 0.41 / 0.20 |
+| skab | 10000 | 0.09 / 0.09 / 0.15 | 0.15 / 0.19 / 0.15 | 0.17 / 0.26 / 0.15 |
+
+**native, tau1 = 1000, K = 25** (max PD with PFA <= alpha; DeepQCD all sensors, mean of seeds / DeepQCD on z / WL-CUSUM)
+
+| dataset | n | alpha = 0.01 | alpha = 0.05 | alpha = 0.10 |
+|---|---|---|---|---|
+| hai | 19 | 0.25 / 0.21 / 0.26 | 0.25 / 0.21 / 0.26 | 0.33 / 0.26 / 0.26 |
+| fog | 22 | 0.06 / 0.00 / 0.00 | 0.06 / 0.00 / 0.00 | 0.08 / 0.00 / 0.00 |
+| smd | 38 | 0.03 / 0.08 / 0.13 | 0.03 / 0.13 / 0.18 | 0.05 / 0.16 / 0.18 |
+| occupancy | 1 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 |
+| occupancy-nolight | 1 | 0.67 / 0.00 / 1.00 | 0.67 / 0.00 / 1.00 | 0.67 / 0.00 / 1.00 |
+| skab | 0 | - | - | - |
+
+**blocks, tau1 = 200, K = 25** (max PD with PFA <= alpha; DeepQCD all sensors, mean of seeds / DeepQCD on z / WL-CUSUM)
+
+| dataset | n | alpha = 0.01 | alpha = 0.05 | alpha = 0.10 |
+|---|---|---|---|---|
+| hai | 10000 | 0.16 / 0.32 / 0.52 | 0.59 / 0.36 / 0.52 | 0.59 / 0.38 / 0.52 |
+| fog | 10000 | 0.04 / 0.01 / 0.00 | 0.08 / 0.11 / 0.00 | 0.11 / 0.14 / 0.04 |
+| smd | 10000 | 0.02 / 0.20 / 0.16 | 0.11 / 0.27 / 0.35 | 0.24 / 0.34 / 0.42 |
+| occupancy | 10000 | 0.95 / 1.00 / 1.00 | 0.97 / 1.00 / 1.00 | 0.98 / 1.00 / 1.00 |
+| occupancy-nolight | 10000 | 0.09 / 0.09 / 0.20 | 0.49 / 0.39 / 0.20 | 0.49 / 0.41 / 0.37 |
+| skab | 10000 | 0.25 / 0.31 / 0.14 | 0.28 / 0.33 / 0.14 | 0.28 / 0.34 / 0.20 |
+
+**native, tau1 = 200, K = 25** (max PD with PFA <= alpha; DeepQCD all sensors, mean of seeds / DeepQCD on z / WL-CUSUM)
+
+| dataset | n | alpha = 0.01 | alpha = 0.05 | alpha = 0.10 |
+|---|---|---|---|---|
+| hai | 19 | 0.25 / 0.21 / 0.26 | 0.25 / 0.21 / 0.26 | 0.33 / 0.26 / 0.26 |
+| fog | 57 | 0.05 / 0.00 / 0.00 | 0.05 / 0.00 / 0.04 | 0.08 / 0.00 / 0.05 |
+| smd | 52 | 0.04 / 0.06 / 0.10 | 0.05 / 0.12 / 0.13 | 0.08 / 0.23 / 0.25 |
+| occupancy | 6 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 |
+| occupancy-nolight | 6 | 0.00 / 0.00 / 0.00 | 0.00 / 0.00 / 0.00 | 0.00 / 0.00 / 0.00 |
+| skab | 14 | 0.17 / 0.21 / 0.14 | 0.17 / 0.21 / 0.14 | 0.17 / 0.21 / 0.14 |
+
+### Splicing
+
+The step at the change point is the distance between the mean of the 10 steps before tau1 and the first 5 after it,
+in standardized units, as a median over test events (`python transient_real.py --splice`). It is measured with the
+real preceding stretch (native) and with a random normal test block in front (blocks). The baseline is two random
+normal blocks spliced together, with no change.
+
+| dataset | native | spliced | ratio | normal -> normal | native events |
+|---|---|---|---|---|---|
+| hai | 3.36 | 12.11 | 3.6x | 9.77 | 19 |
+| fog | 0.81 | 1.45 | 1.8x | 1.41 | 70 |
+| smd | 3.96 | 9.46 | 2.4x | 5.49 | 60 |
+| occupancy | 5.07 | 6.06 | 1.2x | 2.12 | 8 |
+| occupancy-nolight | 0.12 | 2.79 | 22.5x | 2.05 | 8 |
+| skab | 0.66 | 2.11 | 3.2x | 1.62 | 14 |
+
+### Findings
+
+- **No real dataset reproduces the paper's simulated edge under its own protocol** (blocks, tau1 = 1000, K = 25,
+  PD at PFA 0.05, DeepQCD mean of three seeds against WL-CUSUM):
+  - HAI: 0.43 (seed range 0.34-0.54) vs 0.51;
+  - SMD: 0.03 vs 0.26. The network does not transfer to unseen machines; restricted to z it reaches 0.21;
+  - SKAB: 0.15 vs 0.15;
+  - Occupancy with light: 0.95 vs 1.00;
+  - Daphnet: 0.06 vs 0.00, so neither works. A freeze changes the tremor frequency, not the mean, and 25 samples
+    are 0.8 s.
+- **DeepQCD leads only on Occupancy without the light sensor** (0.47 vs 0.20), and only in spliced streams. Both
+  miss all six real arrivals when the stream is not spliced: a real arrival moves the sensors by 0.12 standardized
+  units, a splice by 2.79.
+- **Seed-to-seed spread** in PD reaches 0.2. A lower validation loss does not mean a higher PD, because training
+  scores long geometric transients while the test asks for the first 25 steps.
+
+### Open questions for Prof. Wang
+
+1. Is the scalar Gaussian-LLR direction z an acceptable input to `window_dec_stat`, or should another fitted model
+   be used?
+2. Should the real-data runs use the Sec. 5 LSTM with BCE (used here) or the Sec. 6 RegRNN (GRU 2x64, batch norm,
+   MSE)?
+3. Should blocks (the authors' IoT construction) or native events be primary for real data?
+4. Should tau1 = 1000 and K = 25 be kept for every dataset, or set per dataset from its time scale?

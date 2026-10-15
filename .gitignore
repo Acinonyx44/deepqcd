@@ -10,3 +10,4 @@ uv.lock
 *.npy
 data/
 runs/
+report/index.html

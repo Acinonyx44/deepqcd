@@ -1,0 +1,507 @@
+<title>DeepQCD Transient Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+<style>
+/* A single-column research report: white paper in every viewer setting, numbered sections, figures with captions,
+   booktabs tables. Okabe-Ito colours, one per method, used identically in every figure. */
+:root {
+  color-scheme: light;
+  --bg: #FFFFFF; --ink: #111111; --muted: #4D4D4D; --faint: #8A8A8A; --rule: #CCCCCC; --axis: #222222; --box: #F6F6F6;
+  --deep: #009E73; --cusum: #D55E00; --shiryaev: #0072B2; --sr: #CC79A7; --paper: #FFFFFF;
+  --change: rgba(0, 0, 0, .065); --change-edge: #7A7A7A; --focus: #0072B2; --yes: #00704F; --no: #B2182B;
+  --serif: 'STIX Two Text', 'STIX Two', 'Times New Roman', Times, serif;
+  --sans: 'Source Sans 3', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'Source Code Pro', Menlo, Consolas, monospace;
+}
+html, body { background: #FFFFFF; }
+body { background: var(--bg); color: var(--ink); font-family: var(--serif); font-size: 17.5px; line-height: 1.5; counter-reset: fig tab; }
+.wrap { max-width: 820px; margin: 0 auto; padding-block: 64px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; }
+header { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-bottom: 30px; text-align: center; }
+h1 { font-weight: 700; font-size: clamp(25px, 4vw, 33px); line-height: 1.18; margin: 0; text-wrap: balance; max-width: 28ch; }
+.authors { font-size: 17px; margin: 0; }
+.affil { font-size: 15px; color: var(--muted); margin: 0; font-style: italic; }
+.abstract-h { font-weight: 700; font-size: 15px; margin: 10px 0 0; }
+.abstract { max-width: 660px; text-align: justify; hyphens: auto; font-size: 16px; margin: 0; }
+.directive { max-width: 600px; margin: 4px 0 0; font-size: 16px; font-style: italic; border-left: 2px solid #111; padding: 2px 0 2px 14px; text-align: left; }
+.directive span { display: block; font-style: normal; font-family: var(--sans); font-size: 13px; color: var(--muted); margin-top: 4px; }
+nav { font-family: var(--sans); font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; padding-top: 8px; border-top: 1px solid var(--rule); width: 100%; }
+nav a { color: var(--ink); text-decoration: none; } nav a:hover { text-decoration: underline; }
+.part { font-family: var(--sans); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: 34px; border-bottom: 1.5px solid #111; padding-bottom: 4px; }
+.exp { padding-block: 24px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+h2 { font-weight: 700; font-size: 21px; line-height: 1.25; margin: 0; } h2 .num { display: inline-block; min-width: 1.6em; }
+h3 { font-weight: 700; font-size: 16.5px; margin: 0; }
+.exp p { margin: 0; text-align: justify; hyphens: auto; }
+.exp p b, li b { font-weight: 600; }
+ul.tight, ol.tight { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 9px 12px; border: 1px solid var(--rule); background: var(--box); font-family: var(--sans); }
+.ctl { display: flex; align-items: center; gap: 7px; font-size: 14px; flex-wrap: wrap; }
+.ctl > label, .ctl > .lab { color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid #9A9A9A; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 13.5px; border: 0; border-right: 1px solid #9A9A9A; background: #FFF; color: var(--ink); padding: 2px 9px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: #222; color: #FFF; }
+.seg button:disabled { color: #AAA; cursor: not-allowed; }
+input[type=checkbox] { accent-color: #333; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+select { font: inherit; font-size: 13.5px; background: #FFF; color: var(--ink); border: 1px solid #9A9A9A; padding: 1px 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 3px 16px; font-family: var(--sans); font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 22px; height: 2px; display: inline-block; }
+.legend i.dash { background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 9px) !important; height: 1.5px; }
+.legend i.ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; background: transparent !important; }
+.legend i.band { height: 11px; width: 16px; background: var(--change); border-left: 1px dashed var(--change-edge); }
+.chart { width: 100%; height: 160px; display: block; background: #FFF; }
+.chart.tall { height: 300px; } .chart.short { height: 120px; }
+.plots { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.plotlabel { font-family: var(--sans); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+.plotlabel b { color: var(--ink); font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+.grid2 > div { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.read { font-size: 15px; line-height: 1.45; text-align: justify; hyphens: auto; }
+.read::before { counter-increment: fig; content: "Figure " counter(fig) ". "; font-weight: 700; }
+.cap { font-size: 15px; line-height: 1.45; text-align: left; margin: 0; }
+.cap::before { counter-increment: tab; content: "Table " counter(tab) ". "; font-weight: 700; }
+.read b, .cap b { font-weight: 600; }
+.tablewrap { overflow-x: auto; border-top: 1.5px solid #111; border-bottom: 1.5px solid #111; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; vertical-align: top; }
+th { font-weight: 700; border-bottom: 1px solid #111; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.w, th.w { white-space: normal; }
+td.c, th.c { text-align: center; }
+tr.mid td { border-top: 1px solid var(--rule); }
+.y { color: var(--yes); font-weight: 600; } .n { color: var(--no); font-weight: 600; } .na { color: var(--faint); }
+.win { font-weight: 700; }
+code, .mono { font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 20px; }
+.stat { border-top: 1px solid var(--rule); padding: 6px 0; }
+.stat .k { font-family: var(--sans); font-size: 12.5px; color: var(--muted); }
+.stat .v { font-size: 20px; font-variant-numeric: tabular-nums lining-nums; }
+.note { font-family: var(--sans); font-size: 13.5px; color: var(--muted); margin: 0; }
+.refs { padding-top: 26px; display: flex; flex-direction: column; gap: 8px; }
+.refs ol { margin: 0; padding-left: 2em; font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+footer { font-size: 14px; color: var(--muted); padding-top: 22px; margin-top: 18px; border-top: 1px solid var(--rule); }
+pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); border: 1px solid var(--rule); padding: 10px 12px; overflow-x: auto; margin: 0; line-height: 1.5; }
+@media (max-width: 560px) { body { font-size: 16.5px; } .chart.tall { height: 240px; } .exp p, .read, .abstract { text-align: left; } }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>DeepQCD Reproduced, and Transient Change Detection on Real Data with the Authors' Code</h1>
+  <p class="authors">Gaurav Agarwal</p>
+  <p class="affil">Department of Electrical Engineering, Columbia University · report for Prof. Xiaodong Wang · October 2026</p>
+  <p class="directive">"Work on transient as the paper said, using real world data. Use functions and algorithms strictly from the original QCD code."<span>The directive this report answers</span></p>
+  <p class="abstract-h">Abstract</p>
+  <p class="abstract" id="abstract">__ABSTRACT__</p>
+  <nav aria-label="Sections">
+    <a href="#s1">1 Protocol</a><a href="#s2">2 IID</a><a href="#s3">3 AR(1)</a><a href="#s4">4 Transient</a>
+    <a href="#s5">5 Eligible datasets</a><a href="#s6">6 Real streams</a><a href="#s7">7 Real results</a><a href="#s8">8 Discussion</a><a href="#appA">A Reproduce</a>
+  </nav>
+</header>
+
+<!-- ============================== 1 -->
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Protocol: the authors' code, and only it</h2>
+  <p>Every network, statistic and metric in this report is a function from the authors' released code [1], ported from TensorFlow to PyTorch without changing what it computes. Table 1 lists each function and where it comes from. A test suite checks that each vectorized port counts exactly what the original Python loop counts, by running both on the same inputs.</p>
+  <p class="cap">Where each ingredient comes from. N = <span class="mono">Sec. 5.3 -- TransientQCD/Justification_TransientQCD.ipynb</span>; IoT = <span class="mono">Sec. 6.2 -- IoT Attack Detection/SignalDetect_IoT_Botnet.py</span>; module = <span class="mono">original_qcd.py</span> in the project repository.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Ingredient</th><th>Original code</th><th class="w">As used here</th></tr>
+    <tr><td>Transient model, labels 1 on [τ₁, τ₂)</td><td>N cells 7, 9</td><td class="w"><span class="mono">transient_streams</span>; 3,200 streams × 3,000 steps, τ₁ ~ geo(0.001), τ₂ − τ₁ ~ geo(0.002)</td></tr>
+    <tr><td>Network</td><td>N cell 11</td><td class="w"><span class="mono">Model</span>: LSTM(16) → Dense(10, ReLU) → Dense(1, sigmoid), Keras initializers</td></tr>
+    <tr><td>Training</td><td>N cells 12–13</td><td class="w"><span class="mono">fit</span>: Adam (lr 0.001), binary cross-entropy, batch 32, 20 epochs, no early stopping</td></tr>
+    <tr><td>Online detection</td><td>N cells 15–16</td><td class="w"><span class="mono">scores</span>: state reset per stream, one step at a time (stateful model2)</td></tr>
+    <tr><td>Window-limited CUSUM [6]</td><td>N cells 6, 22</td><td class="w"><span class="mono">window_dec_stat</span> verbatim; window starts as K pre-change samples</td></tr>
+    <tr><td>PFA, PMD, PD</td><td>N cells 19, 22, 25</td><td class="w"><span class="mono">experiment1</span>: false-alarm and missed-detection counts per threshold</td></tr>
+    <tr><td>Real recordings → streams</td><td>IoT 467–548</td><td class="w"><span class="mono">block</span>: contiguous blocks at random offsets (<span class="mono">random_sample</span>, <span class="mono">random_sample_eva</span>)</td></tr>
+    <tr><td>Normalization</td><td>IoT 415–435</td><td class="w"><span class="mono">normalization</span>: standardize by the normal training data (<span class="mono">do_normalization</span>)</td></tr>
+    <tr class="mid"><td><b>Added</b> (not in the code)</td><td>—</td><td class="w">A scalar input for <span class="mono">window_dec_stat</span> on multivariate data, explained in §6</td></tr>
+  </table></div>
+  <p>Part I reruns the paper's Section 5 with this recipe: at the published settings, and at a few others, so the reader can see how each figure moves when a parameter does. Where the authors' notebooks saved their own output, those numbers are drawn on top as open circles. Part II applies the same recipe, unchanged, to real recordings that satisfy the assumptions of the paper's transient section.</p>
+</section>
+
+<div class="part">Part I · Reproducing Section 5 of the paper</div>
+
+<!-- ============================== 2 -->
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>IID observations (paper Figs. 5 and 6)</h2>
+  <p>Pre-change <i>f</i>₀ = N(0, I<sub>p</sub>), post-change <i>f</i>₁ = N(μ1<sub>p</sub>, I<sub>p</sub>), so each step carries Kullback–Leibler information I = pμ²/2. The paper uses p = 7 and μ = 1 (I = 3.5). <b>Bayesian</b> (Fig. 5): τ ~ geo(0.001); PFA = P(Γ &lt; τ) against ADD = E[(Γ − τ)⁺], with the Shiryaev procedure [3] as the optimum. <b>Minimax</b> (Fig. 6): FAP = E<sub>∞</sub>[Γ] (no change) against the delay when the change is at τ = 1, with CUSUM [2] (optimal for Lorden's criterion [4, 5]) and Shiryaev–Roberts. The same trained network serves both settings, as in the paper.</p>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="iidpL">dimension p</span><span class="seg" role="group" aria-labelledby="iidpL" id="iidp"><button aria-pressed="true" data-v="7">7 (paper)</button><button aria-pressed="false" data-v="1">1</button></span></div>
+    <div class="ctl"><span class="lab" id="iidmL">mean shift μ</span><span class="seg" role="group" aria-labelledby="iidmL" id="iidm"><button aria-pressed="true" data-v="1.0">1 (paper)</button><button aria-pressed="false" data-v="0.5">0.5</button></span></div>
+    <div class="ctl"><span class="lab" id="iidtL">minimax delay measured at</span><span class="seg" role="group" aria-labelledby="iidtL" id="iidt"><button aria-pressed="true" data-v="1">τ = 1 (paper)</button><button aria-pressed="false" data-v="200">τ = 200</button></span></div>
+    <div class="ctl"><input type="checkbox" id="iidbug"><label for="iidbug">benchmarks on the notebook's own generator</label></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <h3>Bayesian (Fig. 5)</h3>
+      <div class="legend"><span><i style="background:var(--shiryaev)"></i>Shiryaev (optimal)</span><span><i style="background:var(--deep)"></i>DeepQCD</span><span id="iidbA"><i class="ring" style="color:#444"></i>authors' notebook output</span></div>
+      <canvas class="chart tall" id="iidB" role="img" aria-label="ADD against PFA, IID Bayesian setting"></canvas>
+    </div>
+    <div>
+      <h3>Minimax (Fig. 6)</h3>
+      <div class="legend"><span><i style="background:var(--cusum)"></i>CUSUM</span><span><i style="background:var(--sr)"></i>Shiryaev–Roberts</span><span><i style="background:var(--deep)"></i>DeepQCD</span><span id="iidmBugL" hidden><i class="dash" style="color:#444"></i>notebook generator</span></div>
+      <canvas class="chart tall" id="iidM" role="img" aria-label="ADD against FAP, IID minimax setting"></canvas>
+    </div>
+  </div>
+  <p class="read" id="iidRead"></p>
+</section>
+
+<!-- ============================== 3 -->
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Autoregressive observations (paper Figs. 7 and 8)</h2>
+  <p>x<sub>t</sub> = μ<sub>i</sub> + λ<sub>i</sub>x<sub>t−1</sub> + ε<sub>t</sub>, ε<sub>t</sub> ~ N(0, 1), with (μ, λ) switching from (0, −0.3) to (μ₁, λ₁) at τ. The observations are correlated in time. The benchmarks use the conditional likelihood ratio of the paper's Eq. (10): the modified Shiryaev, CUSUM and Shiryaev–Roberts procedures [9]. DeepQCD sees only the raw x<sub>t</sub>. The paper uses μ₁ = 1, λ₁ = 0.2.</p>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="arL">post-change (μ₁, λ₁)</span><span class="seg" role="group" aria-labelledby="arL" id="arc"><button aria-pressed="true" data-v="mu1.0_lam0.2">(1, 0.2) paper</button><button aria-pressed="false" data-v="mu0.5_lam0.2">(0.5, 0.2)</button><button aria-pressed="false" data-v="mu1.0_lam0.6">(1, 0.6)</button></span></div>
+    <div class="ctl"><span class="lab" id="artL">minimax delay measured at</span><span class="seg" role="group" aria-labelledby="artL" id="art"><button aria-pressed="true" data-v="1">τ = 1 (paper)</button><button aria-pressed="false" data-v="200">τ = 200</button></span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <h3>Bayesian (Fig. 7)</h3>
+      <div class="legend"><span><i style="background:var(--shiryaev)"></i>mod. Shiryaev</span><span><i style="background:var(--deep)"></i>DeepQCD</span><span><i class="ring" style="color:#444"></i>authors' output</span></div>
+      <canvas class="chart tall" id="arB" role="img" aria-label="ADD against PFA, AR Bayesian setting"></canvas>
+    </div>
+    <div>
+      <h3>Minimax (Fig. 8)</h3>
+      <div class="legend"><span><i style="background:var(--cusum)"></i>mod. CUSUM</span><span><i style="background:var(--sr)"></i>mod. Shiryaev–Roberts</span><span><i style="background:var(--deep)"></i>DeepQCD</span></div>
+      <canvas class="chart tall" id="arM" role="img" aria-label="ADD against FAP, AR minimax setting"></canvas>
+    </div>
+  </div>
+  <p class="read" id="arRead"></p>
+</section>
+
+<!-- ============================== 4 -->
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Transient change (paper Fig. 9)</h2>
+  <p>The change is present only on [τ₁, τ₂): <i>f</i>₀ = N(0, 1) before and after, <i>f</i>₁ = N(μ, 1) during. Every experiment ends in exactly one of three ways: a false alarm (Γ &lt; τ₁), a detection (τ₁ ≤ Γ &lt; τ₂) or a miss, so PD + PMD + PFA = 1, and the goal is the largest PD subject to PFA ≤ α (Eq. 11). The network is trained on changes lasting about 500 steps on average and tested on changes lasting K = 25 steps that start at τ₁ = 1000. The benchmark is the window-limited CUSUM [6]. It knows <i>f</i>₀, <i>f</i>₁ and K.</p>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="trmL">post-change mean μ</span><span class="seg" role="group" aria-labelledby="trmL" id="trm"><button aria-pressed="false" data-v="0.5">0.5</button><button aria-pressed="true" data-v="1.0">1 (paper)</button><button aria-pressed="false" data-v="2.0">2</button></span></div>
+    <div class="ctl"><span class="lab" id="trkL">duration K</span><span class="seg" role="group" aria-labelledby="trkL" id="trk"><button aria-pressed="false" data-v="10">10</button><button aria-pressed="true" data-v="25">25 (paper)</button><button aria-pressed="false" data-v="50">50</button></span></div>
+    <div class="ctl"><span class="lab" id="trtL">onset τ₁</span><span class="seg" role="group" aria-labelledby="trtL" id="trt"><button aria-pressed="true" data-v="1000">1000 (paper)</button><button aria-pressed="false" data-v="200">200</button></span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD</span><span><i style="background:var(--cusum)"></i>window-limited CUSUM</span><span><i class="ring" style="color:#444"></i>authors' notebook output</span></div>
+      <canvas class="chart tall" id="trC" role="img" aria-label="PD against PFA for the transient change"></canvas>
+    </div>
+    <div style="gap:10px">
+      <div class="stats" id="trStats"></div>
+      <p class="read" id="trRead"></p>
+    </div>
+  </div>
+</section>
+
+<div class="part">Part II · Transient change detection on real data</div>
+
+<!-- ============================== 5 -->
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Which real datasets satisfy the conditions of Section 5.3</h2>
+  <p>The transient model is <i>f</i>₀ → <i>f</i>₁ → <i>f</i>₀, so the real data must provide labelled events that start and end. The paper's test (τ₁ = 1000, K = 25) adds requirements of its own. A dataset qualifies when:</p>
+  <ol class="tight">
+    <li><b>C1</b> its labels mark intervals that start and end, after which the data returns to normal (not a persistent change, a single instant, or an onset alone);</li>
+    <li><b>C2</b> most events last at least K = 25 steps, because the test scores the first K post-change samples;</li>
+    <li><b>C3</b> at least five test events are preceded by τ₁ − 1 + K = 1024 or more normal steps, so the paper's τ₁ = 1000 can be tested on real, unspliced data;</li>
+    <li><b>C4</b> there are enough events for disjoint training and test sets (at least 5 each, lasting ≥ K).</li>
+  </ol>
+  <p>Table 2 applies these conditions to every labelled dataset in the project. HAI and Daphnet meet all four. SMD fails C2 because most of its anomalies last under 25 minutes, so it is tested on the 60 test events that last at least K. Occupancy and SKAB fail C3. Occupancy has a loader in the authors' own code; it is used with all five sensors and again without the light sensor, which makes arrivals much harder to see. Before an arrival the office is empty overnight for about 14 hours, under 1,000 minutes, and SKAB runs last 20 minutes. At τ₁ = 1000 only the <i>blocks</i> construction of §6 can test these two, using the few long normal stretches available (one weekend for Occupancy) or, for SKAB, chained stretches from different runs. τ₁ = 200 is therefore reported as well. Change-point, persistent-fault and single-instant datasets fail C1 and are not used.</p>
+  <p class="cap">Eligibility of the labelled datasets. Events are counted after the project's train/test split. "≥ K" counts test events lasting at least 25 steps; "≥ 1024 before" counts test events that also have at least 1024 normal steps before them.</p>
+  <div class="tablewrap"><table id="survey"></table></div>
+</section>
+
+<!-- ============================== 6 -->
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>From recordings to experiments</h2>
+  <p><b>Training</b> uses the notebook's generator unchanged (N cell 7). It draws τ₁ ~ geo(0.001) and τ₂ − τ₁ ~ geo(0.002), then fills t &lt; τ₁ with a contiguous block of real normal training data, [τ₁, τ₂) with a real training event from its labelled onset, and t ≥ τ₂ with another normal block. This is the authors' IoT construction (<span class="mono">random_sample</span>) applied to the transient shape. A real event cannot last longer than it did, so τ₂ is moved to the event's end when the geometric draw runs past it. All inputs are standardized by the normal training data (<span class="mono">do_normalization</span>). The network (all sensors, as the IoT code feeds all 115 features) and its training are those of Table 1.</p>
+  <p><b>Testing</b> follows N cells 19 and 22 with τ₁ = 1000 and K = 25, in two ways. <i>Blocks</i>, the authors' construction (<span class="mono">random_sample_eva</span>), runs 10,000 experiments; each has a normal test block of τ₁ − 1 + K steps (the first K start the CUSUM window) followed by the first K steps of a real test event. <i>Native</i> uses no splicing: each test event is preceded by its own recorded normal stretch, giving one experiment per event that has at least 1024 normal steps before it.</p>
+  <p><b>The one addition.</b> <span class="mono">window_dec_stat</span> accumulates x − μ/2: the log-likelihood ratio of N(μ, 1) against N(0, 1), divided by μ. It needs a scalar with that model. Each multivariate observation is therefore mapped to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), where m₀ and C₀ are fitted on normal training data and m₁ on training events. Under Gaussian models with a common covariance, the log-likelihood ratio of x is exactly a linear function of z, z is N(0, 1) before the change, and μ is the mean of z over training events. <span class="mono">window_dec_stat</span> is then called unchanged. As a control, a second DeepQCD is trained on z alone, so the two detectors can also be compared on identical information.</p>
+  <div class="controls">
+    <div class="ctl"><label for="exds">dataset</label><select id="exds"></select></div>
+    <div class="ctl"><span class="lab" id="exnL">example</span><span class="seg" role="group" aria-labelledby="exnL" id="exn"><button aria-pressed="true" data-v="0">1</button><button aria-pressed="false" data-v="1">2</button><button aria-pressed="false" data-v="2">3</button><button aria-pressed="false" data-v="3">4</button></span></div>
+  </div>
+  <div class="plots">
+    <div class="plotlabel"><span><b>Observation</b> · the scalar z (Gaussian log-likelihood direction), normal block → real event → normal block</span><span class="legend"><span><i class="band"></i>event present [τ₁, τ₂)</span></span></div>
+    <canvas class="chart short" id="exz" role="img" aria-label="Projected observation of a real test stream"></canvas>
+    <div class="plotlabel"><span><b>DeepQCD</b> · d<sub>t</sub>, the learned probability that the event is present</span></div>
+    <canvas class="chart short" id="exd" role="img" aria-label="DeepQCD statistic"></canvas>
+    <div class="plotlabel"><span><b>Window-limited CUSUM</b> · <span class="mono">window_dec_stat</span> over the last 25 steps</span></div>
+    <canvas class="chart short" id="exg" role="img" aria-label="Window-limited CUSUM statistic"></canvas>
+  </div>
+  <p class="read" id="exRead"></p>
+</section>
+
+<!-- ============================== 7 -->
+<section class="exp" id="s7">
+  <h2><span class="num">7</span>Results on real data</h2>
+  <p>Each panel is the paper's Fig. 9 for one dataset: PD against PFA, one point per threshold, with 1 − PFA − PMD = PD as in N cell 25. DeepQCD is trained three times (seeds 0–2) to show training variability; the window-limited CUSUM has no training. The controls change the stream construction, the paper's two test parameters, and what DeepQCD sees.</p>
+  <div class="controls">
+    <div class="ctl"><label for="rds">dataset</label><select id="rds"></select></div>
+    <div class="ctl"><span class="lab" id="rconL">experiments</span><span class="seg" role="group" aria-labelledby="rconL" id="rcon"><button aria-pressed="true" data-v="blocks">blocks (authors')</button><button aria-pressed="false" data-v="native">native</button></span></div>
+    <div class="ctl"><span class="lab" id="rkL">K</span><span class="seg" role="group" aria-labelledby="rkL" id="rk"><button aria-pressed="false" data-v="10">10</button><button aria-pressed="true" data-v="25">25 (paper)</button><button aria-pressed="false" data-v="50">50</button></span></div>
+    <div class="ctl"><span class="lab" id="rtL">τ₁</span><span class="seg" role="group" aria-labelledby="rtL" id="rt"><button aria-pressed="true" data-v="1000">1000 (paper)</button><button aria-pressed="false" data-v="200">200</button></span></div>
+    <div class="ctl"><span class="lab" id="rinL">DeepQCD input</span><span class="seg" role="group" aria-labelledby="rinL" id="rin"><button aria-pressed="true" data-v="all">all sensors</button><button aria-pressed="false" data-v="z">z only</button></span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD (one line per seed)</span><span><i style="background:var(--cusum)"></i>window-limited CUSUM</span></div>
+      <canvas class="chart tall" id="rC" role="img" aria-label="PD against PFA on the selected real dataset"></canvas>
+    </div>
+    <div style="gap:10px">
+      <div class="stats" id="rStats"></div>
+      <p class="read" id="rRead"></p>
+    </div>
+  </div>
+  <p class="cap" id="rTabCap"></p>
+  <div class="tablewrap"><table id="rTab"></table></div>
+  <h3>Blocks versus native: what splicing does at the change point</h3>
+  <p>The two constructions can disagree sharply; Occupancy without the light sensor is the clearest case. The authors' block construction puts a normal block recorded at one time in front of an event recorded at another, so the data can jump at τ₁ even when the real event begins gently. Table 4 measures this jump. It is the distance between the mean of the 10 steps before τ₁ and the first 5 steps after it, in standardized units, for the real onset and for the spliced one. The last column is the same distance between two random normal blocks: a splice with no change at all.</p>
+  <p class="cap">Size of the step at τ₁ (median over test events, standardized units). Where "spliced" far exceeds "native", a detector can score in the blocks construction by noticing the splice rather than the event.</p>
+  <div class="tablewrap"><table id="spTab"></table></div>
+  <div class="grid2">
+    <div>
+      <h3>Training history (N cell 14)</h3>
+      <div class="legend"><span><i style="background:#111"></i>training loss</span><span><i class="dash" style="color:#111"></i>validation loss</span></div>
+      <canvas class="chart" id="rH" role="img" aria-label="Training and validation loss per epoch"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read" id="rHRead"></p></div>
+  </div>
+</section>
+
+<!-- ============================== 8 -->
+<section class="exp" id="s8">
+  <h2><span class="num">8</span>Discussion and open questions</h2>
+  __DISCUSSION__
+</section>
+
+<section class="refs" aria-labelledby="refsh">
+  <h2 id="refsh">References</h2>
+  <ol>
+    <li>M. N. Kurt, J. Zheng, Y. Yilmaz, X. Wang. DeepQCD: An end-to-end deep learning approach to quickest change detection. <i>Journal of the Franklin Institute</i> 361, 107199, 2024.</li>
+    <li>E. S. Page. Continuous inspection schemes. <i>Biometrika</i> 41, 100–115, 1954.</li>
+    <li>A. N. Shiryaev. On optimum methods in quickest detection problems. <i>Theory of Probability and Its Applications</i> 8(1), 22–46, 1963.</li>
+    <li>G. Lorden. Procedures for reacting to a change in distribution. <i>Annals of Mathematical Statistics</i> 42(6), 1897–1908, 1971.</li>
+    <li>G. V. Moustakides. Optimal stopping times for detecting changes in distributions. <i>Annals of Statistics</i> 14(4), 1379–1387, 1986.</li>
+    <li>B. K. Guépié, L. Fillatre, I. Nikiforov. Sequential detection of transient changes. <i>Sequential Analysis</i> 31(4), 528–547, 2012.</li>
+    <li>H.-K. Shin, W. Lee, J.-H. Yun, B.-G. Min. Two ICS security datasets and anomaly detection contest on the HIL-based augmented ICS testbed (HAI 21.03). <i>CSET '21</i>, 2021.</li>
+    <li>M. Bächlin et al. Wearable assistant for Parkinson's disease patients with the freezing of gait symptom (Daphnet). <i>IEEE Trans. Information Technology in Biomedicine</i> 14(2), 436–446, 2010.</li>
+    <li>A. S. Polunchenko, V. Raghavan. Comparative performance analysis of the cumulative sum chart and the Shiryaev–Roberts procedure for detecting changes in autocorrelated data. <i>Applied Stochastic Models in Business and Industry</i> 34(6), 922–948, 2018.</li>
+    <li>Y. Su, Y. Zhao, C. Niu, R. Liu, W. Sun, D. Pei. Robust anomaly detection for multivariate time series through stochastic recurrent neural network (OmniAnomaly; SMD). <i>KDD</i>, 2019.</li>
+    <li>L. M. Candanedo, V. Feldheim. Accurate occupancy detection of an office room from light, temperature, humidity and CO<sub>2</sub> measurements using statistical learning models. <i>Energy and Buildings</i> 112, 28–39, 2016.</li>
+    <li>I. D. Katser, V. O. Kozitsin. Skoltech Anomaly Benchmark (SKAB). Kaggle, 2020.</li>
+  </ol>
+</section>
+
+<section class="exp" id="appA">
+  <h2><span class="num">A</span>Reproducing every number</h2>
+  <p>All code is in the project repository on branch <span class="mono">claude/awesome-allen-8e9wvl</span>. The ports and their tests:</p>
+  <pre>original_qcd.py                 the authors' functions (Table 1)
+tests/test_original_qcd.py      each port against a copy of the original loop
+paper_sweep.py                  Part I     e.g.  python paper_sweep.py iid 7 1.0 0
+transient_real.py               Part II    e.g.  python transient_real.py hai all 0
+                                           and   python transient_real.py --survey
+runs/jobs.txt, runs/run_jobs.sh every run behind this page (4 workers, ~1 hour on 4 CPU cores)</pre>
+  <p class="note">__FOOTNOTE__</p>
+</section>
+<footer>Monte Carlo sizes follow the notebooks: Bayesian 10,000 streams; FAP 1,000 never-changing streams (censored at 30,000 steps, FAP = observed time / alarms); delay at τ = 1 10,000 streams; delay at τ = 200 3,000 streams (conditional on no earlier alarm); transient 10,000 experiments; real data 10,000 block experiments per setting, or one per eligible event (native). Open circles are the arrays saved in the authors' notebooks. Colours are the Okabe–Ito palette.</footer>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+const D = JSON.parse(document.getElementById('data').textContent);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+__HELPERS__
+function ring(g, P, x, y, color) { const X = P.sx(x), Y = P.sy(y); g.strokeStyle = color; g.lineWidth = 1.3; g.beginPath(); g.arc(X, Y, 3.2, 0, 2 * Math.PI); g.stroke(); }
+const f2 = v => v == null || !isFinite(v) ? '—' : v.toFixed(2);
+const f3 = v => v == null || !isFinite(v) ? '—' : v.toFixed(3);
+function interpAt(xs, ys, level) { // y at x = level, interpolated in log x; xs need not be sorted
+  const pts = xs.map((x, i) => [x, ys[i]]).filter(([x, y]) => x != null && y != null && x > 0 && isFinite(x) && isFinite(y)).sort((a, b) => a[0] - b[0]);
+  if (!pts.length || level < pts[0][0] || level > pts[pts.length - 1][0]) return NaN;
+  const L = Math.log(level);
+  for (let i = 1; i < pts.length; i++) if (pts[i][0] >= level) { const a = Math.log(pts[i - 1][0]), b = Math.log(pts[i][0]); const w = b > a ? (L - a) / (b - a) : 0; return pts[i - 1][1] + w * (pts[i][1] - pts[i - 1][1]); }
+  return pts[pts.length - 1][1];
+}
+function sortedXY(xs, ys, xmin) { return xs.map((x, i) => [x, ys[i]]).filter(([x, y]) => x != null && y != null && isFinite(x) && isFinite(y) && (xmin == null || x >= xmin)).sort((a, b) => a[0] - b[0]); }
+function pathXY(g, P, pts, color, width = 1.8, dash = null) { line(g, P, pts.map(p => p[0]), pts.map(p => p[1]), color, width, dash); }
+// operating points joined only where neighbours are close (a gap means no threshold produces anything in between)
+function pathBroken(g, P, pts, color, width, maxDec = 0.45) {
+  const segs = []; let cur = [];
+  for (const p of pts) { if (cur.length && (Math.abs(Math.log10(p[0]) - Math.log10(cur[cur.length - 1][0])) > maxDec || Math.abs(p[1] - cur[cur.length - 1][1]) > 0.25)) { segs.push(cur); cur = []; } cur.push(p); }
+  if (cur.length) segs.push(cur);
+  for (const sgm of segs) { if (sgm.length > 1) pathXY(g, P, sgm, color, width); for (const q of (sgm.length < 3 ? sgm : [])) { g.fillStyle = color; g.beginPath(); g.arc(P.sx(q[0]), P.sy(q[1]), 2.6, 0, 2 * Math.PI); g.fill(); } }
+}
+const C = { deep: css('--deep'), cusum: css('--cusum'), sh: css('--shiryaev'), sr: css('--sr'), ink: css('--ink') };
+
+// ============================== §2 / §3 persistent figures
+function bayesPlot(g, W, H, R, auth, shName) {
+  const P = frame(g, W, H, { x0: 1, x1: 3e-4, xlog: true, y0: 0, y1: R.ymax, xlabel: 'PFA (stricter →)', ylabel: 'ADD', ml: 46, xticks: [1, 0.1, 0.01, 0.001] });
+  const deep = sortedXY(R.bayes.DeepQCD.pfa, R.bayes.DeepQCD.add, 3e-4), sh = sortedXY(R.bayes[shName].pfa, R.bayes[shName].add, 3e-4);
+  pathXY(g, P, sh, C.sh, 2); pathXY(g, P, deep, C.deep, 2);
+  if (auth) { auth.sh.forEach(([x, y]) => x >= 3e-4 && y <= R.ymax && ring(g, P, x, y, C.sh)); auth.deep.forEach(([x, y]) => x >= 3e-4 && y <= R.ymax && ring(g, P, x, y, C.deep)); }
+  P.restore();
+}
+function minimaxPlot(g, W, H, R, tau, names, auth, bug) {
+  const key = tau === '1' ? 'add1' : 'add200';
+  const curves = names.map(([k, col]) => [sortedXY(R.minimax[k].fap, R.minimax[k][key]).filter(p => p[0] >= 10), col]);
+  let ymax = 0; curves.forEach(([c]) => c.forEach(p => { if (p[0] <= 3e4) ymax = Math.max(ymax, p[1]); }));
+  if (bug && tau === '1') names.slice(1).forEach(([k]) => { const b = bug[k]; if (b) sortedXY(b.fap, b.add1).forEach(p => { if (p[0] >= 10) ymax = Math.max(ymax, p[1]); }); });
+  ymax = Math.max(0.5, ymax * 1.08);
+  const P = frame(g, W, H, { x0: 10, x1: 3e4, xlog: true, y0: 0, y1: ymax, xlabel: 'FAP, mean steps to a false alarm (stricter →)', ylabel: tau === '1' ? 'ADD, change at τ = 1' : 'ADD, change at τ = 200', ml: 46 });
+  curves.forEach(([c, col]) => pathXY(g, P, c, col, 2));
+  if (bug && tau === '1') names.slice(1).forEach(([k, col]) => { const b = bug[k]; if (b) pathXY(g, P, sortedXY(b.fap, b.add1).filter(p => p[0] >= 10), col, 1.5, [5, 4]); });
+  if (auth && tau === '1') auth.forEach(([pts, col]) => pts.forEach(([x, y]) => x >= 10 && x <= 3e4 && y <= ymax && ring(g, P, x, y, col)));
+  P.restore();
+  return curves;
+}
+const AU = D.authors;
+const zip = (a, b) => a.map((v, i) => [v, b[i]]);
+const AUTH = {
+  iidB: { deep: zip(AU.iid_bayes.pfa_vec, AU.iid_bayes.add_vec), sh: zip(AU.iid_bayes.shiryaev_pfa_vec, AU.iid_bayes.shiryaev_add_vec) },
+  iidM: [[zip(AU.iid_minimax.fap_vec_minimax, AU.iid_minimax.add_vec_minimax), C.deep], [zip(AU.iid_minimax.cusum_fap_vec, AU.iid_minimax.cusum_add_vec), C.cusum], [zip(AU.iid_minimax.sr_fap_vec, AU.iid_minimax.sr_add_vec), C.sr]],
+  arB: { deep: zip(AU.ar.pfa_vec, AU.ar.add_vec), sh: zip(AU.ar.shiryaev_pfa_vec, AU.ar.shiryaev_add_vec) },
+  arM: [[zip(AU.ar.fap_vec_minimax, AU.ar.add_vec_minimax), C.deep], [zip(AU.ar.cusum_fap_vec, AU.ar.cusum_add_vec), C.cusum], [zip(AU.ar.sr_fap_vec, AU.ar.sr_add_vec), C.sr]],
+  tr: { deep: AU.transient.pfa_vec.map((p, i) => [p, 1 - p - AU.transient.mdr_vec[i]]), wl: AU.transient.wlc_pfa_vec.map((p, i) => [p, 1 - p - AU.transient.wlc_mdr_vec[i]]) },
+};
+function bayesYmax(R, sh) { let m = 0; for (const k of ['DeepQCD', sh]) R.bayes[k].pfa.forEach((p, i) => { if (p != null && p >= 3e-4 && R.bayes[k].add[i] != null) m = Math.max(m, R.bayes[k].add[i]); }); return m * 1.08; }
+
+// IID
+const iidP = seg('iidp', upd2), iidM = seg('iidm', upd2), iidT = seg('iidt', upd2); $('iidbug').addEventListener('change', upd2);
+function pending(g, W, H) { g.fillStyle = css('--muted'); g.font = `14px ${css('--sans')}`; g.textAlign = 'center'; g.fillText('run not available', W / 2, H / 2); }
+const chIB = chart($('iidB'), (g, W, H) => { const R = curIID(); if (!R) return pending(g, W, H); R.ymax = bayesYmax(R, 'Shiryaev'); bayesPlot(g, W, H, R, isPaperIID() ? AUTH.iidB : null, 'Shiryaev'); });
+const chIM = chart($('iidM'), (g, W, H) => { const R = curIID(); if (!R) return pending(g, W, H); minimaxPlot(g, W, H, R, iidT(), [['DeepQCD', C.deep], ['CUSUM', C.cusum], ['Shiryaev-Roberts', C.sr]], isPaperIID() ? AUTH.iidM : null, $('iidbug').checked ? R.minimax_notebook_baselines : null); });
+function curIID() { return D.iid[`p${iidP()}_mu${iidM()}`]; }
+function isPaperIID() { return iidP() === '7' && iidM() === '1.0'; }
+function upd2() {
+  const R = curIID(); if (!R) { render(chIB); render(chIM); $('iidRead').textContent = 'This configuration has not been run.'; return; }
+  const p = +iidP(), mu = +iidM(); $('iidbug').disabled = p === 1; if (p === 1) $('iidbug').checked = false;
+  $('iidmBugL').hidden = !$('iidbug').checked; $('iidbA').style.visibility = isPaperIID() ? 'visible' : 'hidden';
+  render(chIB); render(chIM);
+  const b = lv => [interpAt(R.bayes.DeepQCD.pfa, R.bayes.DeepQCD.add, lv), interpAt(R.bayes.Shiryaev.pfa, R.bayes.Shiryaev.add, lv)];
+  const key = iidT() === '1' ? 'add1' : 'add200';
+  const m = lv => ['DeepQCD', 'CUSUM'].map(k => interpAt(R.minimax[k].fap, R.minimax[k][key], lv));
+  const [bd, bs] = b(0.01), [md, mc] = m(1000);
+  let s = `p = ${p}, μ = ${mu} (I = ${(p * mu * mu / 2).toFixed(3).replace(/\.?0+$/, '')}). <b>Bayesian:</b> at PFA = 0.01, ADD is ${f2(bd)} for DeepQCD and ${f2(bs)} for the optimal Shiryaev procedure. <b>Minimax, change at τ = ${iidT()}:</b> at FAP = 1,000, ADD is ${f2(md)} for DeepQCD and ${f2(mc)} for CUSUM. `;
+  if (iidT() === '1') s += 'With the change at the first observation, DeepQCD has little or no delay because its statistic starts high at t = 1 (the start-up effect: at τ = 1 a detector is rewarded for being jumpy at start-up), while CUSUM starts at its minimum, 0. Switch to τ = 200 to measure the delay after the detectors have settled. ';
+  else s += 'Once the change occurs after both detectors have settled, the advantage DeepQCD shows at τ = 1 disappears, as Lorden-optimality of CUSUM [5] predicts. ';
+  if ($('iidbug').checked) s += 'Dashed: CUSUM and Shiryaev–Roberts run on the generator in the current notebook source, which copies one noise draw to all seven coordinates (cells 21, 23, 28 and 30). The authors\' saved CUSUM output (open circles) matches the correct generator (solid), not this one, so the published figure is unaffected; anyone re-running the notebook as released would get the dashed curves.';
+  if (isPaperIID()) s += ' Open circles: the authors\' saved notebook output, which our runs reproduce.';
+  $('iidRead').innerHTML = s;
+}
+
+// AR
+const arC = seg('arc', upd3), arT = seg('art', upd3);
+const chAB = chart($('arB'), (g, W, H) => { const R = D.ar[arC()]; if (!R) return pending(g, W, H); R.ymax = bayesYmax(R, 'mod. Shiryaev'); bayesPlot(g, W, H, R, arC() === 'mu1.0_lam0.2' ? AUTH.arB : null, 'mod. Shiryaev'); });
+const chAM = chart($('arM'), (g, W, H) => { const R = D.ar[arC()]; if (!R) return pending(g, W, H); minimaxPlot(g, W, H, R, arT(), [['DeepQCD', C.deep], ['mod. CUSUM', C.cusum], ['mod. Shiryaev-Roberts', C.sr]], arC() === 'mu1.0_lam0.2' ? AUTH.arM : null, null); });
+function upd3() {
+  const R = D.ar[arC()]; if (!R) { render(chAB); render(chAM); $('arRead').textContent = 'This configuration has not been run.'; return; } render(chAB); render(chAM);
+  const key = arT() === '1' ? 'add1' : 'add200';
+  const bd = interpAt(R.bayes.DeepQCD.pfa, R.bayes.DeepQCD.add, 0.01), bs = interpAt(R.bayes['mod. Shiryaev'].pfa, R.bayes['mod. Shiryaev'].add, 0.01);
+  const md = interpAt(R.minimax.DeepQCD.fap, R.minimax.DeepQCD[key], 1000), mc = interpAt(R.minimax['mod. CUSUM'].fap, R.minimax['mod. CUSUM'][key], 1000);
+  $('arRead').innerHTML = `(μ₁, λ₁) = (${R.mu1}, ${R.lam1}). <b>Bayesian:</b> at PFA = 0.01, ADD is ${f2(bd)} for DeepQCD and ${f2(bs)} for the modified Shiryaev procedure, which knows the model. <b>Minimax, change at τ = ${arT()}:</b> at FAP = 1,000, ADD is ${f2(md)} for DeepQCD and ${f2(mc)} for the modified CUSUM. ` + (arT() === '1' ? 'The same start-up effect as in §2 applies.' : 'With the change after start-up, the comparison is between settled detectors.') + (arC() === 'mu1.0_lam0.2' ? ' Open circles: the authors\' saved notebook output.' : '');
+}
+
+// Transient (Fig. 9)
+const trM = seg('trm', upd4), trK = seg('trk', upd4), trT = seg('trt', upd4);
+function pdPlot(g, W, H, curves, auth, xmin = 1e-3) {
+  const P = frame(g, W, H, { x0: 1, x1: xmin, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: 'PD', ml: 40 });
+  for (const [c, col, w] of curves) { const pts = c.pfa.map((p, i) => [Math.max(p, xmin), c.pd[i]]); pathBroken(g, P, pts, col, w || 2); }
+  if (auth) { auth.deep.forEach(([x, y]) => x >= xmin && ring(g, P, x, y, C.deep)); auth.wl.forEach(([x, y]) => x >= xmin && ring(g, P, x, y, C.cusum)); }
+  P.restore();
+}
+const chTR = chart($('trC'), (g, W, H) => { if (!D.trans[trM()]) return pending(g, W, H); const R = D.trans[trM()].evals[`${trT()},${trK()}`]; const paper = trM() === '1.0' && trK() === '25' && trT() === '1000'; pdPlot(g, W, H, [[R['WL-CUSUM'], C.cusum], [R.DeepQCD, C.deep]], paper ? AUTH.tr : null); });
+function statBlock(el, rows) { el.innerHTML = rows.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join(''); }
+function upd4() {
+  if (!D.trans[trM()]) { render(chTR); statBlock($('trStats'), []); $('trRead').textContent = 'This configuration has not been run.'; return; }
+  const R = D.trans[trM()].evals[`${trT()},${trK()}`]; render(chTR);
+  const a = R.DeepQCD.pd_at, b = R['WL-CUSUM'].pd_at;
+  statBlock($('trStats'), [['PD at PFA ≤ 0.01', `${f2(a['0.01'])} <span class="note">vs ${f2(b['0.01'])}</span>`], ['PD at PFA ≤ 0.05', `${f2(a['0.05'])} <span class="note">vs ${f2(b['0.05'])}</span>`], ['PD at PFA ≤ 0.10', `${f2(a['0.1'])} <span class="note">vs ${f2(b['0.1'])}</span>`]]);
+  const paper = trM() === '1.0' && trK() === '25' && trT() === '1000';
+  $('trRead').innerHTML = `DeepQCD first, window-limited CUSUM after "vs": the largest PD with PFA at most α (Eq. 11), over 10,000 experiments with μ = ${+trM()}, K = ${trK()}, τ₁ = ${trT()}. ` + (paper ? 'At the paper\'s setting the authors\' saved output (open circles) and ours agree, and as in the paper the two detectors are close, with DeepQCD slightly ahead at moderate PFA. ' : '') + 'A smaller μ or a shorter K makes the change harder to catch for both. The network was not retrained for each K or τ₁: as in the paper, it never sees the test duration, while the window-limited CUSUM is told K.';
+}
+
+// ============================== §5 survey
+(function survey() {
+  const ok = v => v === true ? '<span class="y">✓</span>' : v === false ? '<span class="n">✗</span>' : '<span class="na">—</span>';
+  const used = new Set(Object.keys(D.real));
+  let h = '<tr><th>Dataset</th><th class="w">Labels mark</th><th class="num">Events (train / test)</th><th class="num">Median</th><th class="num">≥ K</th><th class="num">≥ 1024 before</th><th class="c">C1</th><th class="c">C2</th><th class="c">C3</th><th class="c">C4</th><th>Used</th></tr>';
+  const met = r => [r.C1, r.C2, r.C3, r.C4].filter(v => v === true).length;
+  const rows = D.survey.slice().sort((a, b) => used.has(b.dataset) - used.has(a.dataset) || met(b) - met(a));
+  for (const r of rows) h += `<tr><td>${r.label}</td><td class="w">${r.kind}</td><td class="num">${r.n_train != null ? r.n_train + ' / ' + r.n_test : '—'}</td><td class="num">${r.med_dur != null ? Math.round(r.med_dur) + ' ' + (/^[0-9]/.test(r.unit) ? '× ' + r.unit : r.unit === 'step' ? 'steps' : r.unit) : '—'}</td><td class="num">${r.test_ge_K ?? '—'}</td><td class="num">${r.native_1000 ?? '—'}</td><td class="c">${ok(r.C1)}</td><td class="c">${ok(r.C2)}</td><td class="c">${ok(r.C3)}</td><td class="c">${ok(r.C4)}</td><td>${used.has(r.dataset) ? '<b>yes</b>' : ''}</td></tr>`;
+  $('survey').innerHTML = h;
+})();
+
+// ============================== §6 examples
+const names = Object.keys(D.real);
+for (const id of ['exds', 'rds']) $(id).innerHTML = names.map(n => `<option value="${n}">${D.real[n].label}</option>`).join('');
+const exN = seg('exn', upd6); $('exds').addEventListener('change', upd6);
+function exPlot(key, color, lab) {
+  return chart($(key), (g, W, H) => {
+    const R = D.real[$('exds').value], e = R.examples[+exN()], y = e[lab], n = y.length;
+    let lo = Math.min(...y), hi = Math.max(...y); if (lab === 'd') { lo = 0; hi = 1; } else { const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad; if (lab === 'g') lo = 0; }
+    const P = frame(g, W, H, { x0: 1, x1: n, y0: lo, y1: hi, ml: 46, mb: 20, xfmt: v => fmt(v) });
+    band(g, P, e.tau1, e.tau2); line(g, P, y.map((_, i) => i + 1), y, color, lab === 'z' ? 1.1 : 1.7); P.restore();
+  });
+}
+const chEX = [exPlot('exz', '#111', 'z'), exPlot('exd', C.deep, 'd'), exPlot('exg', C.cusum, 'g')];
+function upd6() {
+  const R = D.real[$('exds').value], e = R.examples[+exN()]; chEX.forEach(render);
+  $('exRead').innerHTML = `${R.label}, one test stream built as in training: 300 normal steps, a whole real test event (${e.tau2 - e.tau1} ${R.unit} steps, cut at 400), then 200 normal steps. The x-axis counts ${R.unit} steps. DeepQCD (seed 0, all ${R.P} sensors) should rise inside the shaded event and fall after it ends. The window-limited CUSUM sees only z and forgets everything older than 25 steps. On this dataset the training events give μ = ${R.mu_post.toFixed(2)} in z units: ${R.mu_post > 3 ? 'events stand out clearly along z' : R.mu_post > 1 ? 'a moderate shift' : 'a weak mean shift, so a mean-change model captures little of what changes'}.`;
+}
+
+// ============================== §7 results
+const rCon = seg('rcon', upd7), rK = seg('rk', upd7), rT = seg('rt', upd7), rIn = seg('rin', upd7); $('rds').addEventListener('change', upd7);
+function realEval(R, key, con) { // [deep curves..., wl curve, n]
+  const runs = rIn() === 'z' ? [R.z] : R.all;
+  const deep = runs.map(r => r && r[key] && r[key][con] ? r[key][con].DeepQCD : null).filter(Boolean);
+  const base = R.all[0][key] && R.all[0][key][con];
+  return { deep, wl: base ? base['WL-CUSUM'] : null, n: base ? base.n : 0, nev: base ? base.n_events : 0 };
+}
+const chR = chart($('rC'), (g, W, H) => {
+  const R = D.real[$('rds').value], E = realEval(R, `${rT()},${rK()}`, rCon());
+  if (!E.wl) { frame(g, W, H, { x0: 1, x1: 1e-3, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: 'PD', ml: 40 }).restore(); g.fillStyle = css('--muted'); g.font = `14px ${css('--sans')}`; g.textAlign = 'center'; g.fillText('no test event meets this setting (see §5)', W / 2, H / 2); return; }
+  const xmin = rCon() === 'native' ? Math.min(1e-1, 0.5 / Math.max(E.n, 1)) : 1e-3;
+  pdPlot(g, W, H, [[E.wl, C.cusum, 2.2], ...E.deep.map(c => [c, C.deep, rIn() === 'z' ? 2 : 1.4])], null, xmin);
+});
+const chH = chart($('rH'), (g, W, H) => {
+  const R = D.real[$('rds').value]; const hs = rIn() === 'z' ? [R.hist_z] : R.hist;
+  let hi = 0; hs.forEach(h => h && [...h.loss, ...h.val_loss].forEach(v => hi = Math.max(hi, v)));
+  const P = frame(g, W, H, { x0: 1, x1: 20, y0: 0, y1: hi * 1.05, xlabel: 'epoch', ml: 46, xticks: [1, 5, 10, 15, 20] });
+  hs.forEach(h => { if (!h) return; const ep = h.loss.map((_, i) => i + 1); line(g, P, ep, h.loss, '#111', 1.4); line(g, P, ep, h.val_loss, '#111', 1.2, [5, 4]); }); P.restore();
+});
+function rangeTxt(vals) { if (!vals.length) return '—'; const m = vals.reduce((a, b) => a + b, 0) / vals.length; if (vals.length === 1) return f2(m); return `${f2(m)} <span class="note">(${f2(Math.min(...vals))}–${f2(Math.max(...vals))})</span>`; }
+function upd7() {
+  const name = $('rds').value, R = D.real[name], key = `${rT()},${rK()}`, con = rCon(), E = realEval(R, key, con);
+  render(chR); render(chH);
+  if (!E.wl) { statBlock($('rStats'), []); $('rRead').innerHTML = `No test event of ${R.label} has ${+rT() - 1 + +rK()} normal steps before it and lasts ${rK()} steps, so the native construction has nothing to test at this setting. This is condition C3 of §5.`; }
+  else {
+    const at = a => [rangeTxt(E.deep.map(c => c.pd_at[a])), f2(E.wl.pd_at[a])];
+    statBlock($('rStats'), [['PD at PFA ≤ 0.01', `${at('0.01')[0]}<br><span class="note">WL-CUSUM ${at('0.01')[1]}</span>`], ['PD at PFA ≤ 0.05', `${at('0.05')[0]}<br><span class="note">WL-CUSUM ${at('0.05')[1]}</span>`], ['PD at PFA ≤ 0.10', `${at('0.1')[0]}<br><span class="note">WL-CUSUM ${at('0.1')[1]}</span>`]]);
+    $('rRead').innerHTML = `${R.label}: ${con === 'blocks' ? `10,000 experiments from ${E.nev} distinct test events (the authors' block construction)` : `${E.n} native experiments, one per eligible test event: each point moves by 1/${E.n}, so differences smaller than about ${(1 / E.n).toFixed(2)} are not meaningful`}; τ₁ = ${rT()}, K = ${rK()}. DeepQCD ${rIn() === 'z' ? 'sees only z, the same scalar as the window-limited CUSUM' : `sees all ${R.P} standardized sensors`}${rIn() === 'all' ? '; the mean over three seeds, with the range in brackets' : ''}. ${R.notes || ''}`;
+  }
+  // table over datasets at the current setting
+  $('rTabCap').innerHTML = `All six datasets at the current setting (${con === 'blocks' ? 'blocks' : 'native'}, τ₁ = ${rT()}, K = ${rK()}, DeepQCD on ${rIn() === 'z' ? 'z only' : 'all sensors'}): the largest PD with PFA ≤ α, as DeepQCD / window-limited CUSUM (DeepQCD averaged over seeds); the better of each pair is in bold.`;
+  let h = '<tr><th>Dataset</th><th class="num">n</th><th class="num">α = 0.01</th><th class="num">α = 0.05</th><th class="num">α = 0.10</th></tr>';
+  for (const nm of names) {
+    const Rn = D.real[nm], En = realEval(Rn, key, con);
+    if (!En.wl) { h += `<tr><td>${Rn.label}</td><td class="num">0</td><td class="num na" colspan="3">no eligible test event</td></tr>`; continue; }
+    h += `<tr><td>${Rn.label}</td><td class="num">${En.n.toLocaleString('en-US')}</td>`;
+    for (const a of ['0.01', '0.05', '0.1']) {
+      const dv = En.deep.map(c => c.pd_at[a]), m = dv.reduce((x, y) => x + y, 0) / dv.length, w = En.wl.pd_at[a];
+      h += `<td class="num"><span class="${m > w + 0.005 ? 'win' : ''}">${f2(m)}</span> / <span class="${w > m + 0.005 ? 'win' : ''}">${f2(w)}</span></td>`;
+    }
+    h += '</tr>';
+  }
+  $('rTab').innerHTML = h;
+  const hs = rIn() === 'z' ? [R.hist_z] : R.hist, last = hs.filter(Boolean).map(x => x.val_loss[x.val_loss.length - 1]);
+  $('rHRead').innerHTML = `${R.label}: training and validation cross-entropy for ${rIn() === 'z' ? 'the z-only network' : 'the three seeds'}, 20 epochs as in the notebook (no early stopping). Final validation loss ${last.map(f3).join(', ')}. Validation streams use the swapped rates of N cell 9 (τ₁ ~ geo(0.002), τ₂ − τ₁ ~ geo(0.001)) and the same training recordings.`;
+}
+
+(function splice() {
+  if (!D.splice) return;
+  let h = '<tr><th>Dataset</th><th class="num">native onset</th><th class="num">spliced onset</th><th class="num">ratio</th><th class="num">normal → normal splice</th><th class="num">native events</th></tr>';
+  for (const nm of names) { const r = D.splice[nm]; if (!r) continue; h += `<tr><td>${D.real[nm].label}</td><td class="num">${f2(r.native)}</td><td class="num">${f2(r.spliced)}</td><td class="num">${(r.spliced / r.native).toFixed(1)}×</td><td class="num">${f2(r.normal_splice)}</td><td class="num">${r.n_native}</td></tr>`; }
+  $('spTab').innerHTML = h;
+})();
+upd2(); upd3(); upd4(); upd6(); upd7();
+})();
+</script>
