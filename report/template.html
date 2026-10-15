@@ -87,23 +87,21 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 </style>
 
 <div class="wrap">
-<header>
-  <h1>DeepQCD Reproduced, and Transient Change Detection on Real Data with the Authors' Code</h1>
-  <p class="authors">Gaurav Agarwal</p>
-  <p class="affil">Department of Electrical Engineering, Columbia University · report for Prof. Xiaodong Wang · October 2026</p>
-  <p class="directive">"Work on transient as the paper said, using real world data. Use functions and algorithms strictly from the original QCD code."<span>The directive this report answers</span></p>
-  <p class="abstract-h">Abstract</p>
-  <p class="abstract" id="abstract">__ABSTRACT__</p>
-  <nav aria-label="Sections">
-    <a href="#s1">1 Protocol</a><a href="#s2">2 IID</a><a href="#s3">3 AR(1)</a><a href="#s4">4 Transient</a>
-    <a href="#s5">5 Eligible datasets</a><a href="#s6">6 Real streams</a><a href="#s7">7 Real results</a><a href="#s8">8 Discussion</a><a href="#appA">A Reproduce</a>
-  </nav>
-</header>
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <ul class="tight">
+    <li>All functions come from the authors' code (Sec. 5.3 notebook and Sec. 6.2 IoT script), ported from TensorFlow to PyTorch. Each port is tested against the original loop.</li>
+    <li><b>Section 5 reproduced.</b> Our curves match the authors' saved notebook outputs. Bayesian: DeepQCD is within 6% of the Shiryaev optimum in 6 of 7 settings. Minimax: the advantage over CUSUM exists only with the change at τ = 1; with the change at τ = 200, CUSUM is as fast or faster. Transient (Fig. 9): PD 0.87 vs 0.86 at PFA 0.05, as in the paper; the window-limited CUSUM is better for weaker (μ = 0.5) or shorter (K = 10) changes.</li>
+    <li><b>Transient QCD on real data</b> (six datasets that meet the assumptions of Sec. 5.3; τ₁ = 1000, K = 25; PD at PFA ≤ 0.05, DeepQCD vs window-limited CUSUM): HAI 0.43 vs 0.51, SMD 0.03 vs 0.26, SKAB 0.15 vs 0.15, Occupancy 0.95 vs 1.00. Neither detects freezing of gait.</li>
+    <li><b>Splicing.</b> The authors' stream construction joins normal and event data recorded at different times. This creates a jump at τ₁ up to 20 times larger than the real onset. The one case where DeepQCD leads (Occupancy without the light sensor, 0.47 vs 0.20) disappears without splicing.</li>
+    <li>Open questions are in §8.</li>
+  </ul>
+</section>
 
 <!-- ============================== 1 -->
 <section class="exp" id="s1">
-  <h2><span class="num">1</span>Protocol: the authors' code, and only it</h2>
-  <p>Every network, statistic and metric in this report is a function from the authors' released code [1], ported from TensorFlow to PyTorch without changing what it computes. Table 1 lists each function and where it comes from. A test suite checks that each vectorized port counts exactly what the original Python loop counts, by running both on the same inputs.</p>
+  <h2><span class="num">1</span>Setup</h2>
+  <p>Every network, statistic and metric in this report is a function from the authors' released code, ported from TensorFlow to PyTorch without changing what it computes. Table 1 lists each function and where it comes from. A test suite checks that each vectorized port counts exactly what the original Python loop counts, by running both on the same inputs.</p>
   <p class="cap">Where each ingredient comes from. N = <span class="mono">Sec. 5.3 -- TransientQCD/Justification_TransientQCD.ipynb</span>; IoT = <span class="mono">Sec. 6.2 -- IoT Attack Detection/SignalDetect_IoT_Botnet.py</span>; module = <span class="mono">original_qcd.py</span> in the project repository.</p>
   <div class="tablewrap"><table>
     <tr><th>Ingredient</th><th>Original code</th><th class="w">As used here</th></tr>
@@ -111,21 +109,21 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
     <tr><td>Network</td><td>N cell 11</td><td class="w"><span class="mono">Model</span>: LSTM(16) → Dense(10, ReLU) → Dense(1, sigmoid), Keras initializers</td></tr>
     <tr><td>Training</td><td>N cells 12–13</td><td class="w"><span class="mono">fit</span>: Adam (lr 0.001), binary cross-entropy, batch 32, 20 epochs, no early stopping</td></tr>
     <tr><td>Online detection</td><td>N cells 15–16</td><td class="w"><span class="mono">scores</span>: state reset per stream, one step at a time (stateful model2)</td></tr>
-    <tr><td>Window-limited CUSUM [6]</td><td>N cells 6, 22</td><td class="w"><span class="mono">window_dec_stat</span> verbatim; window starts as K pre-change samples</td></tr>
+    <tr><td>Window-limited CUSUM</td><td>N cells 6, 22</td><td class="w"><span class="mono">window_dec_stat</span> verbatim; window starts as K pre-change samples</td></tr>
     <tr><td>PFA, PMD, PD</td><td>N cells 19, 22, 25</td><td class="w"><span class="mono">experiment1</span>: false-alarm and missed-detection counts per threshold</td></tr>
     <tr><td>Real recordings → streams</td><td>IoT 467–548</td><td class="w"><span class="mono">block</span>: contiguous blocks at random offsets (<span class="mono">random_sample</span>, <span class="mono">random_sample_eva</span>)</td></tr>
     <tr><td>Normalization</td><td>IoT 415–435</td><td class="w"><span class="mono">normalization</span>: standardize by the normal training data (<span class="mono">do_normalization</span>)</td></tr>
     <tr class="mid"><td><b>Added</b> (not in the code)</td><td>—</td><td class="w">A scalar input for <span class="mono">window_dec_stat</span> on multivariate data, explained in §6</td></tr>
   </table></div>
-  <p>Part I reruns the paper's Section 5 with this recipe: at the published settings, and at a few others, so the reader can see how each figure moves when a parameter does. Where the authors' notebooks saved their own output, those numbers are drawn on top as open circles. Part II applies the same recipe, unchanged, to real recordings that satisfy the assumptions of the paper's transient section.</p>
+  <p>Sections 2–4 rerun the paper's Section 5 with this recipe, at the published settings and at a few others, to show how each figure changes with its parameters. Where the authors' notebooks saved their own output, those numbers are drawn on top as open circles. Sections 5–7 apply the same recipe, unchanged, to real recordings that satisfy the assumptions of the paper's transient section.</p>
+  <p>Monte Carlo sizes follow the notebooks: Bayesian 10,000 streams; FAP 1,000 streams without a change (censored at 30,000 steps; FAP = observed time / alarms); delay at τ = 1 10,000 streams; delay at τ = 200 3,000 streams, conditional on no earlier alarm; transient 10,000 experiments. Code is on branch <span class="mono">claude/awesome-allen-8e9wvl</span>: <span class="mono">original_qcd.py</span> (ports and tests), <span class="mono">paper_sweep.py</span> (§2–4), <span class="mono">transient_real.py</span> (§5–7), <span class="mono">notes/transient-real.md</span> (all tables).</p>
 </section>
 
-<div class="part">Part I · Reproducing Section 5 of the paper</div>
 
 <!-- ============================== 2 -->
 <section class="exp" id="s2">
   <h2><span class="num">2</span>IID observations (paper Figs. 5 and 6)</h2>
-  <p>Pre-change <i>f</i>₀ = N(0, I<sub>p</sub>), post-change <i>f</i>₁ = N(μ1<sub>p</sub>, I<sub>p</sub>), so each step carries Kullback–Leibler information I = pμ²/2. The paper uses p = 7 and μ = 1 (I = 3.5). <b>Bayesian</b> (Fig. 5): τ ~ geo(0.001); PFA = P(Γ &lt; τ) against ADD = E[(Γ − τ)⁺], with the Shiryaev procedure [3] as the optimum. <b>Minimax</b> (Fig. 6): FAP = E<sub>∞</sub>[Γ] (no change) against the delay when the change is at τ = 1, with CUSUM [2] (optimal for Lorden's criterion [4, 5]) and Shiryaev–Roberts. The same trained network serves both settings, as in the paper.</p>
+  <p>Pre-change <i>f</i>₀ = N(0, I<sub>p</sub>), post-change <i>f</i>₁ = N(μ1<sub>p</sub>, I<sub>p</sub>), so each step carries Kullback–Leibler information I = pμ²/2. The paper uses p = 7 and μ = 1 (I = 3.5). <b>Bayesian</b> (Fig. 5): τ ~ geo(0.001); PFA = P(Γ &lt; τ) against ADD = E[(Γ − τ)⁺], with the Shiryaev procedure as the optimum. <b>Minimax</b> (Fig. 6): FAP = E<sub>∞</sub>[Γ] (no change) against the delay when the change is at τ = 1, with CUSUM (optimal for Lorden's criterion) and Shiryaev–Roberts. The same trained network serves both settings, as in the paper.</p>
   <div class="controls">
     <div class="ctl"><span class="lab" id="iidpL">dimension p</span><span class="seg" role="group" aria-labelledby="iidpL" id="iidp"><button aria-pressed="true" data-v="7">7 (paper)</button><button aria-pressed="false" data-v="1">1</button></span></div>
     <div class="ctl"><span class="lab" id="iidmL">mean shift μ</span><span class="seg" role="group" aria-labelledby="iidmL" id="iidm"><button aria-pressed="true" data-v="1.0">1 (paper)</button><button aria-pressed="false" data-v="0.5">0.5</button></span></div>
@@ -150,7 +148,7 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 <!-- ============================== 3 -->
 <section class="exp" id="s3">
   <h2><span class="num">3</span>Autoregressive observations (paper Figs. 7 and 8)</h2>
-  <p>x<sub>t</sub> = μ<sub>i</sub> + λ<sub>i</sub>x<sub>t−1</sub> + ε<sub>t</sub>, ε<sub>t</sub> ~ N(0, 1), with (μ, λ) switching from (0, −0.3) to (μ₁, λ₁) at τ. The observations are correlated in time. The benchmarks use the conditional likelihood ratio of the paper's Eq. (10): the modified Shiryaev, CUSUM and Shiryaev–Roberts procedures [9]. DeepQCD sees only the raw x<sub>t</sub>. The paper uses μ₁ = 1, λ₁ = 0.2.</p>
+  <p>x<sub>t</sub> = μ<sub>i</sub> + λ<sub>i</sub>x<sub>t−1</sub> + ε<sub>t</sub>, ε<sub>t</sub> ~ N(0, 1), with (μ, λ) switching from (0, −0.3) to (μ₁, λ₁) at τ. The observations are correlated in time. The benchmarks use the conditional likelihood ratio of the paper's Eq. (10): the modified Shiryaev, CUSUM and Shiryaev–Roberts procedures. DeepQCD sees only the raw x<sub>t</sub>. The paper uses μ₁ = 1, λ₁ = 0.2.</p>
   <div class="controls">
     <div class="ctl"><span class="lab" id="arL">post-change (μ₁, λ₁)</span><span class="seg" role="group" aria-labelledby="arL" id="arc"><button aria-pressed="true" data-v="mu1.0_lam0.2">(1, 0.2) paper</button><button aria-pressed="false" data-v="mu0.5_lam0.2">(0.5, 0.2)</button><button aria-pressed="false" data-v="mu1.0_lam0.6">(1, 0.6)</button></span></div>
     <div class="ctl"><span class="lab" id="artL">minimax delay measured at</span><span class="seg" role="group" aria-labelledby="artL" id="art"><button aria-pressed="true" data-v="1">τ = 1 (paper)</button><button aria-pressed="false" data-v="200">τ = 200</button></span></div>
@@ -173,7 +171,7 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 <!-- ============================== 4 -->
 <section class="exp" id="s4">
   <h2><span class="num">4</span>Transient change (paper Fig. 9)</h2>
-  <p>The change is present only on [τ₁, τ₂): <i>f</i>₀ = N(0, 1) before and after, <i>f</i>₁ = N(μ, 1) during. Every experiment ends in exactly one of three ways: a false alarm (Γ &lt; τ₁), a detection (τ₁ ≤ Γ &lt; τ₂) or a miss, so PD + PMD + PFA = 1, and the goal is the largest PD subject to PFA ≤ α (Eq. 11). The network is trained on changes lasting about 500 steps on average and tested on changes lasting K = 25 steps that start at τ₁ = 1000. The benchmark is the window-limited CUSUM [6]. It knows <i>f</i>₀, <i>f</i>₁ and K.</p>
+  <p>The change is present only on [τ₁, τ₂): <i>f</i>₀ = N(0, 1) before and after, <i>f</i>₁ = N(μ, 1) during. Every experiment ends in exactly one of three ways: a false alarm (Γ &lt; τ₁), a detection (τ₁ ≤ Γ &lt; τ₂) or a miss, so PD + PMD + PFA = 1, and the goal is the largest PD subject to PFA ≤ α (Eq. 11). The network is trained on changes lasting about 500 steps on average and tested on changes lasting K = 25 steps that start at τ₁ = 1000. The benchmark is the window-limited CUSUM. It knows <i>f</i>₀, <i>f</i>₁ and K.</p>
   <div class="controls">
     <div class="ctl"><span class="lab" id="trmL">post-change mean μ</span><span class="seg" role="group" aria-labelledby="trmL" id="trm"><button aria-pressed="false" data-v="0.5">0.5</button><button aria-pressed="true" data-v="1.0">1 (paper)</button><button aria-pressed="false" data-v="2.0">2</button></span></div>
     <div class="ctl"><span class="lab" id="trkL">duration K</span><span class="seg" role="group" aria-labelledby="trkL" id="trk"><button aria-pressed="false" data-v="10">10</button><button aria-pressed="true" data-v="25">25 (paper)</button><button aria-pressed="false" data-v="50">50</button></span></div>
@@ -191,11 +189,10 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
   </div>
 </section>
 
-<div class="part">Part II · Transient change detection on real data</div>
 
 <!-- ============================== 5 -->
 <section class="exp" id="s5">
-  <h2><span class="num">5</span>Which real datasets satisfy the conditions of Section 5.3</h2>
+  <h2><span class="num">5</span>Datasets</h2>
   <p>The transient model is <i>f</i>₀ → <i>f</i>₁ → <i>f</i>₀, so the real data must provide labelled events that start and end. The paper's test (τ₁ = 1000, K = 25) adds requirements of its own. A dataset qualifies when:</p>
   <ol class="tight">
     <li><b>C1</b> its labels mark intervals that start and end, after which the data returns to normal (not a persistent change, a single instant, or an onset alone);</li>
@@ -210,10 +207,10 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 
 <!-- ============================== 6 -->
 <section class="exp" id="s6">
-  <h2><span class="num">6</span>From recordings to experiments</h2>
+  <h2><span class="num">6</span>Real-data protocol</h2>
   <p><b>Training</b> uses the notebook's generator unchanged (N cell 7). It draws τ₁ ~ geo(0.001) and τ₂ − τ₁ ~ geo(0.002), then fills t &lt; τ₁ with a contiguous block of real normal training data, [τ₁, τ₂) with a real training event from its labelled onset, and t ≥ τ₂ with another normal block. This is the authors' IoT construction (<span class="mono">random_sample</span>) applied to the transient shape. A real event cannot last longer than it did, so τ₂ is moved to the event's end when the geometric draw runs past it. All inputs are standardized by the normal training data (<span class="mono">do_normalization</span>). The network (all sensors, as the IoT code feeds all 115 features) and its training are those of Table 1.</p>
   <p><b>Testing</b> follows N cells 19 and 22 with τ₁ = 1000 and K = 25, in two ways. <i>Blocks</i>, the authors' construction (<span class="mono">random_sample_eva</span>), runs 10,000 experiments; each has a normal test block of τ₁ − 1 + K steps (the first K start the CUSUM window) followed by the first K steps of a real test event. <i>Native</i> uses no splicing: each test event is preceded by its own recorded normal stretch, giving one experiment per event that has at least 1024 normal steps before it.</p>
-  <p><b>The one addition.</b> <span class="mono">window_dec_stat</span> accumulates x − μ/2: the log-likelihood ratio of N(μ, 1) against N(0, 1), divided by μ. It needs a scalar with that model. Each multivariate observation is therefore mapped to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), where m₀ and C₀ are fitted on normal training data and m₁ on training events. Under Gaussian models with a common covariance, the log-likelihood ratio of x is exactly a linear function of z, z is N(0, 1) before the change, and μ is the mean of z over training events. <span class="mono">window_dec_stat</span> is then called unchanged. As a control, a second DeepQCD is trained on z alone, so the two detectors can also be compared on identical information.</p>
+  <p><b>Addition not in the original code.</b> <span class="mono">window_dec_stat</span> accumulates x − μ/2: the log-likelihood ratio of N(μ, 1) against N(0, 1), divided by μ. It needs a scalar with that model. Each multivariate observation is therefore mapped to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), where m₀ and C₀ are fitted on normal training data and m₁ on training events. Under Gaussian models with a common covariance, the log-likelihood ratio of x is exactly a linear function of z, z is N(0, 1) before the change, and μ is the mean of z over training events. <span class="mono">window_dec_stat</span> is then called unchanged. As a control, a second DeepQCD is trained on z alone, so the two detectors can also be compared on identical information.</p>
   <div class="controls">
     <div class="ctl"><label for="exds">dataset</label><select id="exds"></select></div>
     <div class="ctl"><span class="lab" id="exnL">example</span><span class="seg" role="group" aria-labelledby="exnL" id="exn"><button aria-pressed="true" data-v="0">1</button><button aria-pressed="false" data-v="1">2</button><button aria-pressed="false" data-v="2">3</button><button aria-pressed="false" data-v="3">4</button></span></div>
@@ -252,7 +249,7 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
   </div>
   <p class="cap" id="rTabCap"></p>
   <div class="tablewrap"><table id="rTab"></table></div>
-  <h3>Blocks versus native: what splicing does at the change point</h3>
+  <h3>Blocks versus native</h3>
   <p>The two constructions can disagree sharply; Occupancy without the light sensor is the clearest case. The authors' block construction puts a normal block recorded at one time in front of an event recorded at another, so the data can jump at τ₁ even when the real event begins gently. Table 4 measures this jump. It is the distance between the mean of the 10 steps before τ₁ and the first 5 steps after it, in standardized units, for the real onset and for the spliced one. The last column is the same distance between two random normal blocks: a splice with no change at all.</p>
   <p class="cap">Size of the step at τ₁ (median over test events, standardized units). Where "spliced" far exceeds "native", a detector can score in the blocks construction by noticing the splice rather than the event.</p>
   <div class="tablewrap"><table id="spTab"></table></div>
@@ -268,42 +265,10 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 
 <!-- ============================== 8 -->
 <section class="exp" id="s8">
-  <h2><span class="num">8</span>Discussion and open questions</h2>
+  <h2><span class="num">8</span>Conclusions and open questions</h2>
   __DISCUSSION__
 </section>
 
-<section class="refs" aria-labelledby="refsh">
-  <h2 id="refsh">References</h2>
-  <ol>
-    <li>M. N. Kurt, J. Zheng, Y. Yilmaz, X. Wang. DeepQCD: An end-to-end deep learning approach to quickest change detection. <i>Journal of the Franklin Institute</i> 361, 107199, 2024.</li>
-    <li>E. S. Page. Continuous inspection schemes. <i>Biometrika</i> 41, 100–115, 1954.</li>
-    <li>A. N. Shiryaev. On optimum methods in quickest detection problems. <i>Theory of Probability and Its Applications</i> 8(1), 22–46, 1963.</li>
-    <li>G. Lorden. Procedures for reacting to a change in distribution. <i>Annals of Mathematical Statistics</i> 42(6), 1897–1908, 1971.</li>
-    <li>G. V. Moustakides. Optimal stopping times for detecting changes in distributions. <i>Annals of Statistics</i> 14(4), 1379–1387, 1986.</li>
-    <li>B. K. Guépié, L. Fillatre, I. Nikiforov. Sequential detection of transient changes. <i>Sequential Analysis</i> 31(4), 528–547, 2012.</li>
-    <li>H.-K. Shin, W. Lee, J.-H. Yun, B.-G. Min. Two ICS security datasets and anomaly detection contest on the HIL-based augmented ICS testbed (HAI 21.03). <i>CSET '21</i>, 2021.</li>
-    <li>M. Bächlin et al. Wearable assistant for Parkinson's disease patients with the freezing of gait symptom (Daphnet). <i>IEEE Trans. Information Technology in Biomedicine</i> 14(2), 436–446, 2010.</li>
-    <li>A. S. Polunchenko, V. Raghavan. Comparative performance analysis of the cumulative sum chart and the Shiryaev–Roberts procedure for detecting changes in autocorrelated data. <i>Applied Stochastic Models in Business and Industry</i> 34(6), 922–948, 2018.</li>
-    <li>Y. Su, Y. Zhao, C. Niu, R. Liu, W. Sun, D. Pei. Robust anomaly detection for multivariate time series through stochastic recurrent neural network (OmniAnomaly; SMD). <i>KDD</i>, 2019.</li>
-    <li>L. M. Candanedo, V. Feldheim. Accurate occupancy detection of an office room from light, temperature, humidity and CO<sub>2</sub> measurements using statistical learning models. <i>Energy and Buildings</i> 112, 28–39, 2016.</li>
-    <li>I. D. Katser, V. O. Kozitsin. Skoltech Anomaly Benchmark (SKAB). Kaggle, 2020.</li>
-  </ol>
-</section>
-
-<section class="exp" id="appA">
-  <h2><span class="num">A</span>Reproducing every number</h2>
-  <p>All code is in the project repository on branch <span class="mono">claude/awesome-allen-8e9wvl</span>. The ports and their tests:</p>
-  <pre>original_qcd.py                 the authors' functions (Table 1)
-tests/test_original_qcd.py      each port against a copy of the original loop
-paper_sweep.py                  Part I     e.g.  python paper_sweep.py iid 7 1.0 0
-transient_real.py               Part II    e.g.  python transient_real.py hai all 0
-                                           and   python transient_real.py --survey
-runs/jobs*.txt, runs/run_jobs*.sh every run behind this page (4 workers, ~2 hours on 4 CPU cores)
-report/build_report.py          builds this page from the run outputs
-notes/transient-real.md         the same results as tables, with the open questions</pre>
-  <p class="note">__FOOTNOTE__</p>
-</section>
-<footer>Monte Carlo sizes follow the notebooks: Bayesian 10,000 streams; FAP 1,000 never-changing streams (censored at 30,000 steps, FAP = observed time / alarms); delay at τ = 1 10,000 streams; delay at τ = 200 3,000 streams (conditional on no earlier alarm); transient 10,000 experiments; real data 10,000 block experiments per setting, or one per eligible event (native). Open circles are the arrays saved in the authors' notebooks. Colours are the Okabe–Ito palette.</footer>
 </div>
 
 <script id="data" type="application/json">__DATA__</script>
@@ -384,7 +349,7 @@ function upd2() {
   const [bd, bs] = b(0.01), [md, mc] = m(1000);
   let s = `p = ${p}, μ = ${mu} (I = ${(p * mu * mu / 2).toFixed(3).replace(/\.?0+$/, '')}). <b>Bayesian:</b> at PFA = 0.01, ADD is ${f2(bd)} for DeepQCD and ${f2(bs)} for the optimal Shiryaev procedure. <b>Minimax, change at τ = ${iidT()}:</b> at FAP = 1,000, ADD is ${f2(md)} for DeepQCD and ${f2(mc)} for CUSUM. `;
   if (iidT() === '1') s += 'With the change at the first observation, DeepQCD has little or no delay because its statistic starts high at t = 1 (the start-up effect: at τ = 1 a detector is rewarded for being jumpy at start-up), while CUSUM starts at its minimum, 0. Switch to τ = 200 to measure the delay after the detectors have settled. ';
-  else s += 'Once the change occurs after both detectors have settled, the advantage DeepQCD shows at τ = 1 disappears, as Lorden-optimality of CUSUM [5] predicts. ';
+  else s += 'Once the change occurs after both detectors have settled, the advantage DeepQCD shows at τ = 1 disappears, as Lorden-optimality of CUSUM predicts. ';
   if ($('iidbug').checked) s += 'Dashed: CUSUM and Shiryaev–Roberts run on the generator in the current notebook source, which copies one noise draw to all seven coordinates (cells 21, 23, 28 and 30). The authors\' saved CUSUM output (open circles) matches the correct generator (solid), not this one, so the published figure is unaffected; anyone re-running the notebook as released would get the dashed curves.';
   if (isPaperIID()) s += ' Open circles: the authors\' saved notebook output, which our runs reproduce.';
   $('iidRead').innerHTML = s;

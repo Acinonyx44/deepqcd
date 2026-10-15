@@ -82,7 +82,7 @@ def main():
     missing = [k for k in ('p7_mu1.0',) if k not in D['iid']]
     data = json.dumps(D, separators=(',', ':'), allow_nan=False).replace('</', '<\\/')
     html = open(os.path.join(HERE, 'template.html')).read()
-    for key, fn in (('__ABSTRACT__', 'abstract.html'), ('__DISCUSSION__', 'discussion.html'), ('__FOOTNOTE__', 'footnote.html')):
+    for key, fn in (('__DISCUSSION__', 'discussion.html'),):
         p = os.path.join(HERE, fn)
         html = html.replace(key, open(p).read().strip() if os.path.exists(p) else '(pending)')
     html = html.replace('__HELPERS__', open(os.path.join(HERE, 'helpers.js')).read())
