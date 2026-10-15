@@ -298,7 +298,9 @@ tests/test_original_qcd.py      each port against a copy of the original loop
 paper_sweep.py                  Part I     e.g.  python paper_sweep.py iid 7 1.0 0
 transient_real.py               Part II    e.g.  python transient_real.py hai all 0
                                            and   python transient_real.py --survey
-runs/jobs.txt, runs/run_jobs.sh every run behind this page (4 workers, ~1 hour on 4 CPU cores)</pre>
+runs/jobs*.txt, runs/run_jobs*.sh every run behind this page (4 workers, ~2 hours on 4 CPU cores)
+report/build_report.py          builds this page from the run outputs
+notes/transient-real.md         the same results as tables, with the open questions</pre>
   <p class="note">__FOOTNOTE__</p>
 </section>
 <footer>Monte Carlo sizes follow the notebooks: Bayesian 10,000 streams; FAP 1,000 never-changing streams (censored at 30,000 steps, FAP = observed time / alarms); delay at τ = 1 10,000 streams; delay at τ = 200 3,000 streams (conditional on no earlier alarm); transient 10,000 experiments; real data 10,000 block experiments per setting, or one per eligible event (native). Open circles are the arrays saved in the authors' notebooks. Colours are the Okabe–Ito palette.</footer>
