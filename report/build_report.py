@@ -12,7 +12,7 @@ REPO = os.path.dirname(HERE)
 
 NOTES = {
     'hai': 'HAI 21.03: a hardware-in-the-loop industrial control testbed sampled at 1 Hz; attacks are split at random between training and test.',
-    'fog': 'Daphnet: ankle accelerometer of Parkinson\'s patients at 32 Hz; freezing episodes; subjects split 6 / 4, so the test subjects are unseen.',
+    'fog': 'Daphnet: ankle accelerometer of Parkinson\'s patients at 32 Hz; freezing episodes; subjects split 6 / 4, so the test subjects are unseen. The GitHub copy is a .mat of the UCI Daphnet data.',
     'smd': 'SMD: server metrics at one reading per minute; machines split 14 / 14, so the test machines are unseen; only events lasting at least K count.',
     'occupancy': 'UCI Occupancy: one office, one reading per minute; training file datatraining.txt, test files datatest.txt and datatest2.txt (the split of the authors\' own Occupancy script).',
     'occupancy-nolight': 'UCI Occupancy without the light sensor: the same office, but presence must be inferred from CO₂, temperature and humidity.',
@@ -22,6 +22,17 @@ LABEL = {'hai': 'HAI 21.03 (ICS attacks)', 'fog': 'Daphnet (freezing of gait)', 
          'occupancy': 'Occupancy (all five sensors)', 'occupancy-nolight': 'Occupancy (no light sensor)', 'skab': 'SKAB (water pump)'}
 UNIT = {'hai': 's', 'fog': '1/32 s', 'smd': 'min', 'occupancy': 'min', 'occupancy-nolight': 'min', 'skab': 's'}
 ORDER = ['hai', 'smd', 'skab', 'fog', 'occupancy', 'occupancy-nolight']
+GH = 'https://github.com/'
+SOURCES = {  # where each dataset is downloaded from (fetch_data.sh)
+    'hai': GH + 'icsdataset/hai/tree/master/hai-21.03', 'smd': GH + 'NetManAIOps/OmniAnomaly/tree/master/ServerMachineDataset',
+    'skab': GH + 'waico/SKAB', 'fog': GH + 'takotab/FOG', 'occupancy': GH + 'LuisM78/Occupancy-detection-data',
+    'occupancy-nolight': GH + 'LuisM78/Occupancy-detection-data', 'fishkiller': GH + 'OctoberChang/klcpd_code',
+    'yahoo': GH + 'OctoberChang/klcpd_code', 'beedance': GH + 'OctoberChang/klcpd_code', 'hasc': GH + 'OctoberChang/klcpd_code',
+    'nab': GH + 'numenta/NAB', 'tcpd': GH + 'alan-turing-institute/TCPD', 'tep': GH + 'camaramm/tennessee-eastman-profBraatz',
+    'cmapss': GH + 'edwardzjl/CMAPSSData', 'pmubage': GH + 'NanpengYu/pmuBAGE', 'sp500': GH + 'fja05680/dow-sp500-100-years',
+    'seismic': GH + 'AI4EPS/PhaseNet', 'pumpdump': GH + 'SystemsLab-Sapienza/pump-and-dump-dataset',
+    'keystroke': GH + 'bikramb98/Keystroke-dynamics', 'iot-mirai': GH + 'ymirsky/KitNET-py',
+}
 
 
 def thin(c, n=160):
@@ -46,7 +57,7 @@ def load(p):
 
 
 def main():
-    D = {'authors': load(os.path.join(HERE, 'authors_outputs.json')), 'iid': {}, 'ar': {}, 'trans': {}, 'real': {}}
+    D = {'authors': load(os.path.join(HERE, 'authors_outputs.json')), 'iid': {}, 'ar': {}, 'trans': {}, 'real': {}, 'sources': SOURCES}
     for f in glob.glob(os.path.join(REPO, 'runs', 'paper_sweep', '*.json')):
         r = load(f)
         r.pop('history', None)
