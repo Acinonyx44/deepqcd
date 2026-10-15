@@ -74,6 +74,9 @@ tr.mid td { border-top: 1px solid var(--rule); }
 .y { color: var(--yes); font-weight: 600; } .n { color: var(--no); font-weight: 600; } .na { color: var(--faint); }
 .win { font-weight: 700; }
 code, .mono { font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; }
+figure.diag { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.diagwrap { overflow-x: auto; }
+.diagwrap svg { display: block; width: 100%; height: auto; min-width: 640px; color: var(--ink); }
 a { color: #0B4F8A; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 a:hover { color: #111; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 20px; }
@@ -185,6 +188,105 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 <section class="exp" id="s4">
   <h2><span class="num">4</span>Transient change (paper Fig. 9)</h2>
   <p>The change is present only on [τ₁, τ₂): <i>f</i>₀ = N(0, 1) before and after, <i>f</i>₁ = N(μ, 1) during. Every experiment ends in exactly one of three ways: a false alarm (Γ &lt; τ₁), a detection (τ₁ ≤ Γ &lt; τ₂) or a miss, so PD + PMD + PFA = 1, and the goal is the largest PD subject to PFA ≤ α (Eq. 11). The network is trained on changes lasting about 500 steps on average and tested on changes lasting K = 25 steps that start at τ₁ = 1000. The benchmark is the window-limited CUSUM. It knows <i>f</i>₀, <i>f</i>₁ and K.</p>
+  <figure class="diag">
+    <div class="diagwrap">
+    <svg viewBox="0 0 820 300" role="img" aria-label="Timeline of one transient stream: the label is 0 before tau1, 1 on [tau1, tau2) and 0 after; the observations come from f0, then f1, then f0, either simulated, spliced from real blocks, or a real recording; the first alarm is a false alarm before tau1, a detection on [tau1, tau2), and a miss if there is none before tau2." font-family="Source Sans 3, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="currentColor">
+      <defs><marker id="dA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <!-- event column -->
+      <rect x="420" y="18" width="140" height="226" fill="#000" fill-opacity="0.06"/>
+      <line x1="420" y1="14" x2="420" y2="262" stroke="currentColor" stroke-dasharray="3 3" stroke-opacity="0.6"/>
+      <line x1="560" y1="14" x2="560" y2="262" stroke="currentColor" stroke-dasharray="3 3" stroke-opacity="0.6"/>
+      <!-- row labels -->
+      <g text-anchor="end" font-weight="600">
+        <text x="140" y="50">label y<tspan font-size="9" dy="3">t</tspan></text>
+        <text x="140" y="98">x<tspan font-size="9" dy="3">t</tspan><tspan dy="-3">, simulated</tspan></text>
+        <text x="140" y="142">x<tspan font-size="9" dy="3">t</tspan><tspan dy="-3">, real: blocks</tspan></text>
+        <text x="140" y="186">x<tspan font-size="9" dy="3">t</tspan><tspan dy="-3">, real: native</tspan></text>
+        <text x="140" y="230">first alarm Γ</text>
+      </g>
+      <!-- label waveform -->
+      <polyline points="150,58 420,58 420,30 560,30 560,58 800,58" fill="none" stroke="currentColor" stroke-width="2"/>
+      <text x="285" y="51" text-anchor="middle">0</text><text x="490" y="25" text-anchor="middle">1</text><text x="680" y="51" text-anchor="middle">0</text>
+      <!-- simulated -->
+      <g fill="none" stroke="currentColor"><rect x="150" y="80" width="270" height="28"/><rect x="420" y="80" width="140" height="28"/><rect x="560" y="80" width="240" height="28"/></g>
+      <text x="285" y="98" text-anchor="middle">draws from f₀ = N(0, 1)</text><text x="490" y="98" text-anchor="middle">draws from f₁ = N(μ, 1)</text><text x="680" y="98" text-anchor="middle">draws from f₀</text>
+      <!-- real blocks -->
+      <g fill="none" stroke="currentColor"><rect x="150" y="124" width="270" height="28"/><rect x="420" y="124" width="140" height="28"/><rect x="560" y="124" width="240" height="28"/></g>
+      <text x="285" y="142" text-anchor="middle">normal block, random offset (time A)</text><text x="490" y="142" text-anchor="middle">event from its onset (B)</text><text x="680" y="142" text-anchor="middle">normal block (time C)</text>
+      <g stroke="currentColor" stroke-width="1.5"><line x1="414" y1="156" x2="422" y2="120"/><line x1="419" y1="156" x2="427" y2="120"/><line x1="554" y1="156" x2="562" y2="120"/><line x1="559" y1="156" x2="567" y2="120"/></g>
+      <text x="420" y="118" text-anchor="middle" font-size="10.5" font-style="italic">splice</text><text x="560" y="118" text-anchor="middle" font-size="10.5" font-style="italic">splice</text>
+      <!-- real native -->
+      <g fill="none" stroke="currentColor"><rect x="150" y="168" width="270" height="28"/><rect x="420" y="168" width="140" height="28"/><rect x="560" y="168" width="240" height="28" stroke-dasharray="4 3" stroke-opacity="0.6"/></g>
+      <text x="285" y="186" text-anchor="middle">the normal stretch recorded before it</text><text x="490" y="186" text-anchor="middle">the event as recorded</text><text x="680" y="186" text-anchor="middle" fill-opacity="0.65">(not needed for the test)</text>
+      <!-- outcomes -->
+      <g fill="none" stroke="currentColor"><rect x="150" y="212" width="270" height="28"/><rect x="420" y="212" width="140" height="28"/><rect x="560" y="212" width="240" height="28"/></g>
+      <text x="285" y="230" text-anchor="middle" fill="#B2182B" font-weight="600">Γ &lt; τ₁: false alarm</text><text x="490" y="230" text-anchor="middle" fill="#00704F" font-weight="600">τ₁ ≤ Γ &lt; τ₂: detection</text><text x="680" y="230" text-anchor="middle" font-weight="600">no alarm before τ₂: miss</text>
+      <!-- time axis -->
+      <line x1="150" y1="262" x2="806" y2="262" stroke="currentColor" marker-end="url(#dA)"/>
+      <g stroke="currentColor"><line x1="150" y1="258" x2="150" y2="266"/><line x1="420" y1="258" x2="420" y2="266"/><line x1="560" y1="258" x2="560" y2="266"/></g>
+      <text x="150" y="282" text-anchor="middle">t = 1</text><text x="420" y="282" text-anchor="middle">τ₁</text><text x="560" y="282" text-anchor="middle">τ₂ = τ₁ + K</text><text x="800" y="282" text-anchor="end">t</text>
+      <text x="285" y="298" text-anchor="middle" font-size="11" fill-opacity="0.7">training: τ₁ ~ geo(0.001) · test: τ₁ = 1000</text><text x="560" y="298" text-anchor="middle" font-size="11" fill-opacity="0.7">training: τ₂ − τ₁ ~ geo(0.002) · test: K = 25</text>
+    </svg>
+    </div>
+    <figcaption class="read">How one transient stream is built. The label y<sub>t</sub> is 0, then 1 on [τ₁, τ₂), then 0 again: the network's target, and the switch that selects the source of x<sub>t</sub>. In simulation the source is f₀ or f₁. On real data it is either spliced from blocks recorded at different times (the authors' construction) or taken as recorded (native). The test ends at τ₂, and the first alarm decides the outcome.</figcaption>
+  </figure>
+  <figure class="diag">
+    <div class="diagwrap">
+    <svg viewBox="0 0 820 300" role="img" aria-label="Block diagram: sources f0 and f1 feed a switch driven by the label y_t; its output x_t enters two detectors in parallel. DeepQCD is an LSTM with a one-step state delay, then a dense ReLU layer and a dense sigmoid layer giving d_t; in training, binary cross-entropy against y_t updates the weights. The window-limited CUSUM maps x_t to the scalar z, subtracts mu over 2 and runs max(0, r + .) over the last K steps, giving g_t. Each statistic is compared with a threshold h; the first crossing is the alarm." font-family="Source Sans 3, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="currentColor">
+      <defs><marker id="dB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.3">
+        <!-- sources and switch -->
+        <rect x="10" y="127" width="72" height="30"/><rect x="10" y="167" width="72" height="30"/>
+        <line x1="82" y1="142" x2="116" y2="142"/><line x1="82" y1="182" x2="116" y2="182"/>
+        <circle cx="119" cy="142" r="3"/><circle cx="119" cy="182" r="3"/><circle cx="160" cy="162" r="3"/>
+        <line x1="157" y1="163" x2="122" y2="180" stroke-width="2"/>
+        <polyline points="70,262 70,236 139,236 139,176" stroke-dasharray="4 3" marker-end="url(#dB)"/>
+        <rect x="10" y="262" width="150" height="30"/>
+        <!-- x_t wire and branch -->
+        <line x1="163" y1="162" x2="200" y2="162"/><line x1="200" y1="110" x2="200" y2="215"/>
+        <line x1="200" y1="110" x2="223" y2="110" marker-end="url(#dB)"/><line x1="200" y1="215" x2="223" y2="215" marker-end="url(#dB)"/>
+        <!-- DeepQCD path -->
+        <rect x="225" y="93" width="90" height="34"/><rect x="345" y="93" width="100" height="34"/><rect x="475" y="93" width="100" height="34"/>
+        <line x1="315" y1="110" x2="343" y2="110" marker-end="url(#dB)"/><line x1="445" y1="110" x2="473" y2="110" marker-end="url(#dB)"/>
+        <line x1="575" y1="110" x2="653" y2="110" marker-end="url(#dB)"/>
+        <rect x="250" y="48" width="40" height="22"/>
+        <polyline points="305,93 305,59 292,59" marker-end="url(#dB)"/><polyline points="250,59 237,59 237,91" marker-end="url(#dB)"/>
+        <!-- training loop -->
+        <rect x="625" y="22" width="110" height="28"/>
+        <polyline points="605,110 605,36 623,36" marker-end="url(#dB)"/>
+        <line x1="800" y1="36" x2="737" y2="36" marker-end="url(#dB)"/>
+        <polyline points="680,22 680,10 395,10 395,91" stroke-dasharray="4 3" marker-end="url(#dB)"/>
+        <!-- WL-CUSUM path -->
+        <rect x="225" y="198" width="90" height="34"/><rect x="345" y="198" width="100" height="34"/><rect x="475" y="198" width="120" height="34"/>
+        <line x1="315" y1="215" x2="343" y2="215" marker-end="url(#dB)"/><line x1="445" y1="215" x2="473" y2="215" marker-end="url(#dB)"/>
+        <line x1="595" y1="215" x2="653" y2="215" marker-end="url(#dB)"/>
+        <!-- comparators -->
+        <rect x="655" y="93" width="50" height="34"/><rect x="655" y="198" width="50" height="34"/>
+        <line x1="705" y1="110" x2="745" y2="110" marker-end="url(#dB)"/><line x1="705" y1="215" x2="745" y2="215" marker-end="url(#dB)"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="46" y="147">f₀</text><text x="46" y="187">f₁</text>
+        <text x="85" y="282">label y<tspan font-size="9" dy="3">t</tspan><tspan dy="-3"> = 1{τ₁ ≤ t &lt; τ₂}</tspan></text>
+        <text x="104" y="230" font-size="11" font-style="italic">selects f₀ or f₁</text>
+        <text x="181" y="155">x<tspan font-size="9" dy="3">t</tspan></text>
+        <text x="270" y="114">LSTM, 16</text><text x="395" y="114">Dense 10, ReLU</text><text x="525" y="114">Dense 1, sigmoid</text>
+        <text x="270" y="63">z⁻¹</text><text x="320" y="80" font-size="11" font-style="italic">s<tspan font-size="8" dy="3">t</tspan></text><text x="222" y="80" font-size="11" font-style="italic">s<tspan font-size="8" dy="3">t−1</tspan></text>
+        <text x="330" y="104" font-size="11">s<tspan font-size="8" dy="3">t</tspan></text>
+        <text x="625" y="104">d<tspan font-size="9" dy="3">t</tspan></text>
+        <text x="680" y="40">BCE(d<tspan font-size="9" dy="3">t</tspan><tspan dy="-3">, y</tspan><tspan font-size="9" dy="3">t</tspan><tspan dy="-3">)</tspan></text>
+        <text x="775" y="30" font-size="11">y<tspan font-size="8" dy="3">t</tspan></text>
+        <text x="505" y="26" font-size="11" font-style="italic">training only: Adam updates the weights</text>
+        <text x="270" y="219">z = w′(x − m₀)/σ</text><text x="395" y="219">z − μ/2</text><text x="535" y="212">last K steps:</text><text x="535" y="226">r ← max(0, r + ·)</text>
+        <text x="625" y="209">g<tspan font-size="9" dy="3">t</tspan></text>
+        <text x="680" y="114">≥ h</text><text x="680" y="219">≥ h</text>
+        <text x="782" y="114">alarm</text><text x="782" y="219">alarm</text>
+      </g>
+      <text x="225" y="146" font-weight="600">DeepQCD</text><text x="225" y="160" font-size="11" fill-opacity="0.75">learned from labelled streams; sees all sensors</text>
+      <text x="225" y="251" font-weight="600">Window-limited CUSUM</text><text x="225" y="265" font-size="11" fill-opacity="0.75">told f₀, f₁ and K (on real data: a fitted Gaussian)</text>
+    </svg>
+    </div>
+    <figcaption class="read">The two detectors as systems. Both read the same x<sub>t</sub>, one sample at a time, and alarm the first time their statistic reaches a threshold h. DeepQCD is a recurrent filter: an LSTM with state s<sub>t</sub> fed back through a one-step delay, then two dense layers. Its weights are set offline by minimizing the cross-entropy between d<sub>t</sub> and the label y<sub>t</sub> (dashed path, training only). The window-limited CUSUM is fixed: the log-likelihood ratio of each sample (here z − μ/2, scaled) accumulated with a floor at zero over the last K samples. Sweeping h traces each detector's curve.</figcaption>
+  </figure>
   <div class="controls">
     <div class="ctl"><span class="lab" id="trmL">post-change mean μ</span><span class="seg" role="group" aria-labelledby="trmL" id="trm"><button aria-pressed="false" data-v="0.5">0.5</button><button aria-pressed="true" data-v="1.0">1 (paper)</button><button aria-pressed="false" data-v="2.0">2</button></span></div>
     <div class="ctl"><span class="lab" id="trkL">duration K</span><span class="seg" role="group" aria-labelledby="trkL" id="trk"><button aria-pressed="false" data-v="10">10</button><button aria-pressed="true" data-v="25">25 (paper)</button><button aria-pressed="false" data-v="50">50</button></span></div>
@@ -240,7 +342,7 @@ pre { font-family: var(--mono); font-size: 12.5px; background: var(--box); borde
 <section class="exp" id="s6">
   <h2><span class="num">6</span>Real-data protocol</h2>
   <p><b>Training</b> uses the notebook's generator unchanged (N cell 7). It draws τ₁ ~ geo(0.001) and τ₂ − τ₁ ~ geo(0.002), then fills t &lt; τ₁ with a contiguous block of real normal training data, [τ₁, τ₂) with a real training event from its labelled onset, and t ≥ τ₂ with another normal block. This is the authors' IoT construction (<span class="mono">random_sample</span>) applied to the transient shape. A real event cannot last longer than it did, so τ₂ is moved to the event's end when the geometric draw runs past it. All inputs are standardized by the normal training data (<span class="mono">do_normalization</span>). The network (all sensors, as the IoT code feeds all 115 features) and its training are those of Table 1.</p>
-  <p><b>Testing</b> follows N cells 19 and 22 with τ₁ = 1000 and K = 25, in two ways. <i>Blocks</i>, the authors' construction (<span class="mono">random_sample_eva</span>), runs 10,000 experiments; each has a normal test block of τ₁ − 1 + K steps (the first K start the CUSUM window) followed by the first K steps of a real test event. <i>Native</i> uses no splicing: each test event is preceded by its own recorded normal stretch, giving one experiment per event that has at least 1024 normal steps before it.</p>
+  <p><b>Testing</b> follows N cells 19 and 22 with τ₁ = 1000 and K = 25, in the two ways drawn in the third and fourth rows of the timeline in §4. <i>Blocks</i>, the authors' construction (<span class="mono">random_sample_eva</span>), runs 10,000 experiments; each has a normal test block of τ₁ − 1 + K steps (the first K start the CUSUM window) followed by the first K steps of a real test event. <i>Native</i> uses no splicing: each test event is preceded by its own recorded normal stretch, giving one experiment per event that has at least 1024 normal steps before it.</p>
   <p><b>Addition not in the original code.</b> <span class="mono">window_dec_stat</span> accumulates x − μ/2: the log-likelihood ratio of N(μ, 1) against N(0, 1), divided by μ. It needs a scalar with that model. Each multivariate observation is therefore mapped to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), where m₀ and C₀ are fitted on normal training data and m₁ on training events. Under Gaussian models with a common covariance, the log-likelihood ratio of x is exactly a linear function of z, z is N(0, 1) before the change, and μ is the mean of z over training events. <span class="mono">window_dec_stat</span> is then called unchanged. As a control, a second DeepQCD is trained on z alone, so the two detectors can also be compared on identical information.</p>
   <h3>Distributions on real data</h3>
   <p>On real data, p and q are unknown; there are only labelled samples. The figure below shows their empirical versions on the test split. One view is the scalar z, drawn with the two Gaussians that <span class="mono">window_dec_stat</span> assumes: N(0, 1) before the event and N(μ, 1) during it, fitted on the training split. The other view is the single sensor whose mean moves most between normal and event training data, in standardized units. Where the empirical curves depart from the dashed Gaussians, the window-limited CUSUM is using the wrong model. DeepQCD uses no model.</p>
