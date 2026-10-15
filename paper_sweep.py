@@ -92,7 +92,7 @@ def persistent(kind, a, b, seed):
     # Bayesian (Fig. 5 / 7): DeepQCD vs (modified) Shiryaev, same streams
     tau = np.random.geometric(rho, N_BAYES).astype(float)
     sh_make, _ = bench[names[0]]
-    st = stopping_times([NetDetector(model, hp), sh_make(hp)], N_BAYES, src.sampler(N_BAYES, tau), max_t=MAX_T, warn=False)
+    st = stopping_times([NetDetector(model, hp), sh_make(hp)], N_BAYES, src.sampler(N_BAYES, tau), chunk=400, max_t=MAX_T, warn=False)
     res['bayes'] = {k: dict(zip(('pfa', 'add'), map(r, bayes_metrics(s, tau)))) for k, s in zip(['DeepQCD', names[0]], st)}
     print(f'  Bayesian done', flush=True)
 

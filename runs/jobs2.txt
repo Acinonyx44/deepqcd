@@ -5,3 +5,7 @@ transient_real.py occupancy-nolight all 2
 paper_sweep.py iid 7 1.0 0
 paper_sweep.py ar 1.0 0.2 0
 paper_sweep.py iid 7 0.5 0
+paper_sweep.py iid 1 1.0 0
+paper_sweep.py iid 1 0.5 0
+paper_sweep.py ar 0.5 0.2 0
+paper_sweep.py ar 1.0 0.6 0
