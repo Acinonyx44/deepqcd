@@ -1,0 +1,31 @@
+transient_real.py hai all 0
+transient_real.py smd all 0
+transient_real.py fog all 0
+transient_real.py occupancy all 0
+transient_real.py skab all 0
+paper_sweep.py iid 7 1.0 0
+paper_sweep.py ar 1.0 0.2 0
+paper_sweep.py transient 1.0 0
+transient_real.py --survey
+transient_real.py hai z 0
+transient_real.py smd z 0
+transient_real.py fog z 0
+transient_real.py occupancy z 0
+transient_real.py skab z 0
+paper_sweep.py iid 7 0.5 0
+paper_sweep.py iid 1 1.0 0
+paper_sweep.py iid 1 0.5 0
+paper_sweep.py ar 0.5 0.2 0
+paper_sweep.py ar 1.0 0.6 0
+paper_sweep.py transient 0.5 0
+paper_sweep.py transient 2.0 0
+transient_real.py hai all 1
+transient_real.py smd all 1
+transient_real.py fog all 1
+transient_real.py occupancy all 1
+transient_real.py skab all 1
+transient_real.py hai all 2
+transient_real.py smd all 2
+transient_real.py fog all 2
+transient_real.py occupancy all 2
+transient_real.py skab all 2
