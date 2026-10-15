@@ -39,6 +39,8 @@ Two ways to form the test experiments:
 
 Run:  .venv/bin/python transient_real.py <dataset> <all|z> <seed>      -> runs/transient_real/<dataset>.<input>.s<seed>.json
       .venv/bin/python transient_real.py --survey                      -> runs/transient_real/survey.json
+      .venv/bin/python transient_real.py --splice                      -> runs/transient_real/splice.json
+      .venv/bin/python transient_real.py --table                       -> the results table of notes/transient-real.md
 """
 import json
 import os
@@ -246,6 +248,30 @@ def survey():
         json.dump(rows, f, indent=1)
 
 
+def splice_check(n_rep=20, seed=0):
+    """How much the blocks construction changes the data at the change point. For each test event: the distance
+    between the mean of the 10 steps before the onset and the first 5 steps after it (standardized units), with the
+    real preceding stretch (native) and with a random normal test block in front (blocks). Baseline: the same
+    distance between two random normal blocks, i.e. what a splice alone does when nothing changes."""
+    rng = np.random.default_rng(seed)
+    out = {}
+    for name in DATASETS:
+        d = realdata.LOADERS[name]()
+        tr_norm, tr_ev, te_norm, te = pools(d)
+        norm = normalization(tr_norm)
+        te_norm = [norm(x) for x in te_norm]
+        ev = [(norm(x), t) for x, t in te if len(x) - t >= 25]
+        jump = lambda pre, post: float(np.linalg.norm(pre[-10:].mean(0) - post[:5].mean(0)))
+        nat = [jump(x[:t], x[t:]) for x, t in ev if t >= 30]
+        spl = [jump(block(te_norm, 200, rng), x[t:]) for _ in range(n_rep) for x, t in ev]
+        base = [jump(block(te_norm, 200, rng), block(te_norm, 200, rng)) for _ in range(20 * n_rep)]
+        out[name] = {'native': float(np.median(nat)), 'spliced': float(np.median(spl)), 'normal_splice': float(np.median(base)),
+                     'n_native': len(nat)}
+        print(name, out[name], flush=True)
+    with open(os.path.join(OUT, 'splice.json'), 'w') as f:
+        json.dump(out, f, indent=1)
+
+
 def table():
     """Markdown summary for notes/transient-real.md: max PD s.t. PFA <= alpha, DeepQCD (mean over seeds) / WL-CUSUM."""
     import glob
@@ -276,6 +302,8 @@ def table():
 if __name__ == '__main__':
     if sys.argv[1] == '--table':
         print(table())
+    elif sys.argv[1] == '--splice':
+        splice_check()
     elif sys.argv[1] == '--survey':
         survey()
     else:
