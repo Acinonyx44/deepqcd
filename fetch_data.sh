@@ -76,4 +76,7 @@ if [ ! -s kitnet/mirai3.npy ]; then
     (cd kitnet && unzip -o -q dataset.zip mirai3.csv)
     ../.venv/bin/python -c "import numpy as np; np.save('kitnet/mirai3.npy', np.loadtxt('kitnet/mirai3.csv', delimiter=',', dtype=np.float32))"
 fi
+echo mm
+mkdir -p mm
+for s in SP500 VIXCLS; do get "https://fred.stlouisfed.org/graph/fredgraph.csv?id=$s" mm/$s.csv; done   # market-maker simulator calibration
 echo done

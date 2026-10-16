@@ -1,0 +1,282 @@
+<title>Market-Maker Stress Detection</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+:root { --flow: #0072B2; }
+.ev { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <ul class="tight">
+    <li><b>Question.</b> When a market maker has to offload a position (at once, gradually, passively, by short-gamma hedging) or pulls its quotes, the order flow switches from two-sided noise to a one-sided or self-reinforcing regime for a while and then switches back: a transient change. Can a firm that sees only the anonymous public book and trades detect it quickly, and tell it apart from informed trading after news?</li>
+    <li><b>Data.</b> A synthetic E-mini-style futures market on the S&amp;P 500, started at the last close (__CLOSE__ on __DATE__, FRED) with its recent volatility (__SIGMA__ a day over 60 days), and walked forward __NDAYS__ trading days. Six market makers, three quoting tight and three wide, each with its own stress policy; every stress episode is labelled.</li>
+    <li><b>Result.</b> __RESULT__</li>
+    <li><b>Caveat.</b> All of this is in a simulator whose rules we wrote. It shows that the problem is well posed and which unwind styles are detectable in principle; it does not show that the same edge exists in a real market. §6 lists how to test that on real data.</li>
+  </ul>
+</section>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Why this is a change-detection problem</h2>
+  <p>A market maker earns the spread and carries inventory risk. When a position grows past its limits, for example after taking the other side of a large client options trade off the exchange, it has to lay that risk off in the lit market. How it does so decides what the change looks like on the tape:</p>
+  <p class="cap">Stress policies, the change each produces, and the closest case in the DeepQCD paper.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Policy</th><th class="w">What the market maker does</th><th class="w">Change in the public data</th><th class="w">Paper analogue</th></tr>
+    <tr><td>instant</td><td class="w">market orders for the whole position within 1–3 s</td><td class="w">a burst of one-sided volume and a price jump; over in seconds</td><td class="w">a very short transient (Shewhart is optimal for one sample)</td></tr>
+    <tr><td>gradual (TWAP)</td><td class="w">equal child orders every second for 2–10 min</td><td class="w">a small, persistent imbalance of signed volume</td><td class="w">transient change of long duration (§5.3), low signal-to-noise</td></tr>
+    <tr><td>transient skew</td><td class="w">quotes only the exit side, through fair value, at triple size</td><td class="w">the book leans: depth and quotes on one side, the other side thin</td><td class="w">transient change in the book, not in the trades</td></tr>
+    <tr><td>CTA-like (short gamma)</td><td class="w">hedges by buying after up-ticks and selling after down-ticks</td><td class="w">signed volume follows returns; volatility and autocorrelation rise</td><td class="w">a change in dependence, like the AR(1) case (§5.2)</td></tr>
+    <tr><td>withdrawal</td><td class="w">pulls all quotes for 1–4 min</td><td class="w">less depth in the book; nothing traded</td><td class="w">transient change in the book only</td></tr>
+  </table></div>
+  <p>The hard part is not seeing pressure but attributing it. After news, informed traders also send one-sided orders, and the book and trades look much the same. The difference shows up later: informed trading moves the price to a new value, while a forced unwind pushes it away from value and the price comes back when the selling stops. So the test streams contain news as a confounder (label 0).</p>
+</section>
+
+<div class="controls" style="margin-top:6px">
+  <div class="ctl"><span class="lab" id="scL">Scenario for everything below: market makers skew their quotes</span><span class="seg" role="group" aria-labelledby="scL" id="scS"><button aria-pressed="true" data-v="1.0">openly (κ as in Table 2)</button><button aria-pressed="false" data-v="0.25">discreetly (κ / 4)</button></span></div>
+</div>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>The synthetic market</h2>
+  <p>One step is one second of a 6.5-hour session; prices are on a 0.25-point tick. The value of the index has a public part P<sub>t</sub>, a random walk with the S&amp;P 500's recent volatility, an intraday U-shape and slow volatility clustering, and a private part I<sub>t</sub>, which jumps at news times (about 10 a day, standard deviation 6 points). Market makers quote around a common fair-value estimate F<sub>t</sub> = P<sub>t</sub> + G<sub>t</sub>, where the flow-implied part moves with signed aggressive volume and decays toward I<sub>t</sub>:</p>
+  <p style="text-align:center">G<sub>t+1</sub> = G<sub>t</sub> + λ · (buy volume − sell volume)<sub>t</sub> + η (I<sub>t</sub> − G<sub>t</sub>), &emsp; λ = __LAMBDA__ points per contract, η = 1/300 per second.</p>
+  <p>Noise traders send Poisson market orders (about 2 a second, more at the open and close) with a slowly drifting buy/sell imbalance. After news, informed traders buy or sell until the price has caught up with the new value. Each market maker quotes a bid and an ask around F<sub>t</sub> − κ q (its inventory q skews its quotes); the tight makers always quote a one-tick market, so the inside spread is one tick, as in E-mini futures. Every second the market orders are matched against the posted quotes, best price first, pro rata at a price.</p>
+  <p class="cap">The six market makers. Stress events arrive about 15 times a day at a random maker; inventory shocks are 150–400 contracts, a random side. A maker's quotes are centred κ·q below fair value when it holds q contracts, so a large inventory shows in its quotes; the scenario switch above divides every κ by 4.</p>
+  <div class="tablewrap"><table id="mmTab"></table></div>
+  <figure class="diag">
+    <div class="diagwrap">
+    <svg viewBox="0 0 820 250" role="img" aria-label="Simulator block diagram: news and public value drive informed traders and the fair value; noise traders, informed traders and the six market makers send market orders or quotes to the matching step; the matching produces trades that move the fair value through price impact; the public tape and book give the nine features that the detectors read; the labels come only from the market makers' stress states." font-family="Source Sans 3, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="currentColor">
+      <defs><marker id="mA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.3">
+        <rect x="10" y="20" width="120" height="34"/><rect x="10" y="80" width="120" height="34"/><rect x="10" y="140" width="120" height="34"/><rect x="10" y="200" width="120" height="34"/>
+        <rect x="190" y="50" width="130" height="34"/><rect x="190" y="150" width="130" height="64"/>
+        <rect x="380" y="100" width="110" height="44"/>
+        <rect x="550" y="100" width="110" height="44"/>
+        <rect x="700" y="60" width="110" height="34"/><rect x="700" y="150" width="110" height="34"/>
+        <line x1="130" y1="37" x2="188" y2="60" marker-end="url(#mA)"/>
+        <line x1="130" y1="97" x2="188" y2="74" marker-end="url(#mA)"/>
+        <line x1="130" y1="157" x2="378" y2="114" marker-end="url(#mA)"/>
+        <line x1="320" y1="67" x2="378" y2="108" marker-end="url(#mA)"/>
+        <line x1="320" y1="182" x2="378" y2="132" marker-end="url(#mA)"/>
+        <line x1="255" y1="84" x2="255" y2="148" marker-end="url(#mA)"/>
+        <line x1="490" y1="122" x2="548" y2="122" marker-end="url(#mA)"/>
+        <polyline points="435,100 435,30 255,30 255,48" stroke-dasharray="4 3" marker-end="url(#mA)"/>
+        <line x1="660" y1="115" x2="698" y2="82" marker-end="url(#mA)"/>
+        <line x1="755" y1="94" x2="755" y2="148" marker-end="url(#mA)"/>
+        <polyline points="130,217 640,217 640,184 698,170" stroke-dasharray="2 3"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="70" y="41">public value P<tspan font-size="9" dy="3">t</tspan></text><text x="70" y="101">news → value I<tspan font-size="9" dy="3">t</tspan></text><text x="70" y="161">noise traders</text><text x="70" y="221">stress events</text>
+        <text x="255" y="71">fair value F<tspan font-size="9" dy="3">t</tspan></text>
+        <text x="255" y="172">MM1 … MM6</text><text x="255" y="188" font-size="11">quotes, and orders</text><text x="255" y="202" font-size="11">when under stress</text>
+        <text x="435" y="118">matching</text><text x="435" y="134" font-size="11">book × orders</text>
+        <text x="605" y="118">public tape</text><text x="605" y="134" font-size="11">and book</text>
+        <text x="755" y="81">9 features / s</text><text x="755" y="171">detectors</text>
+        <text x="345" y="24" font-size="11" font-style="italic">price impact λ</text>
+        <text x="160" y="125" font-size="11" font-style="italic">informed</text>
+        <text x="560" y="212" font-size="11" font-style="italic">labels (stress on/off), for training and scoring only</text>
+        <text x="225" y="122" font-size="11" font-style="italic">quote around F</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption class="read">How the simulator is wired. Only the public tape and book reach the detectors; who traded, and why, does not. The labels come from the market makers' stress states and are used only to train DeepQCD and to score the detectors.</figcaption>
+  </figure>
+  <h3>One held-out day</h3>
+  <div class="legend"><span><i style="background:#111"></i>mid price</span><span><i class="band"></i>a market maker under stress (label 1)</span><span><i style="background:var(--deep)"></i>DeepQCD statistic</span></div>
+  <canvas class="chart" id="dayP" role="img" aria-label="Mid price over one held-out day with stress episodes shaded"></canvas>
+  <canvas class="chart short" id="dayD" role="img" aria-label="DeepQCD statistic over the day"></canvas>
+  <div class="legend" id="invLeg"></div>
+  <canvas class="chart" id="dayI" role="img" aria-label="Inventories of the six market makers over the day"></canvas>
+  <p class="read" id="dayRead"></p>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>What each stress policy looks like</h2>
+  <p>One test stream per policy, from five minutes before the stress starts to ten minutes after, and one stream with a news jump instead. The price is in ticks relative to its value at the onset; signed volume is buys minus sells in each second.</p>
+  <div class="controls"><div class="ctl"><span class="lab" id="exL">stream</span><span class="seg" role="group" aria-labelledby="exL" id="exS"></span></div></div>
+  <div class="plots">
+    <div class="plotlabel"><span><b>Mid price</b> · ticks from the onset</span><span class="legend"><span><i class="band"></i>stress active</span></span></div>
+    <canvas class="chart short" id="exM" role="img" aria-label="Mid price around the onset"></canvas>
+    <div class="plotlabel"><span><b>Signed volume</b> · contracts per second</span></div>
+    <canvas class="chart short" id="exV" role="img" aria-label="Signed volume around the onset"></canvas>
+    <div class="plotlabel"><span><b>Depth imbalance</b> · (bid − ask) / (bid + ask) over the best 3 levels</span></div>
+    <canvas class="chart short" id="exP" role="img" aria-label="Depth imbalance around the onset"></canvas>
+    <div class="plotlabel"><span><b>DeepQCD</b> · d<sub>t</sub></span></div>
+    <canvas class="chart short" id="exD" role="img" aria-label="DeepQCD statistic around the onset"></canvas>
+  </div>
+  <p class="read" id="exRead"></p>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Detection</h2>
+  <p>The paper's transient protocol (§5.3, notebook cells 19 and 22). Each test stream has one stress event at τ₁ = __TAU1__ s and news at its usual rate; an alarm before τ₁ is a false alarm, an alarm in [τ₁, τ₁ + K) with K = __K__ s is a detection. __NS__ streams per policy and __NS__ news-only streams, at random times of day, none seen in training. Each detector has one threshold, set so that its false-alarm probability over all stress streams is α; a firm watching the tape does not know which policy it faces. The first __WARM__ s of each stream are a warm-up for every detector.</p>
+  <ul class="tight">
+    <li><b>DeepQCD</b>: the paper's LSTM(16) → Dense(10) → Dense(1), trained as in the notebooks (Adam, cross-entropy, batch 32, 20 epochs) on 3,200 windows of 3,000 s from the training days, label 1 while any market maker is under stress; the 9 features standardized by unlabelled-normal training data.</li>
+    <li><b>Window-limited CUSUM</b>: <span class="mono">window_dec_stat</span> over the last __WLK__ s, one per stress policy, each on the Gaussian log-likelihood direction of that policy against normal data (fitted on the training days); each is divided by its own 95% quantile under no stress, and the statistic is the largest of the six, so that every policy gets a fair share of the false-alarm budget. It also gets the absolute values of the signed features, because stress can push either way.</li>
+    <li><b>Flow z-score</b>: |signed volume over the last __FW__ s| in training standard deviations; the usual trader's rule.</li>
+  </ul>
+  <p class="cap" id="detCap"></p>
+  <div class="tablewrap"><table id="detTab"></table></div>
+  <div class="controls">
+    <div class="ctl"><label for="cvP">curve for</label><select id="cvP"></select></div>
+    <div class="ctl"><span class="lab" id="aL">α for the table</span><span class="seg" role="group" aria-labelledby="aL" id="aS"><button aria-pressed="false" data-v="0.01">0.01</button><button aria-pressed="true" data-v="0.05">0.05</button><button aria-pressed="false" data-v="0.1">0.10</button></span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD</span><span><i style="background:var(--cusum)"></i>window-limited CUSUM</span><span><i style="background:var(--flow)"></i>flow z-score</span></div>
+      <canvas class="chart tall" id="cvC" role="img" aria-label="PD against PFA for the selected policy"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read" id="cvRead"></p></div>
+  </div>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Is a detection worth anything?</h2>
+  <p>A detection is worth something only if the price is still away from value when the alarm comes. For each directional stress (instant, TWAP, skew, lean) that a detector caught at α = 0.05, the table gives how far the stressed flow had pushed the price from value at the alarm, in the direction of the stressed maker's trades. That distance is known only inside the simulator; it is what will come back. It also gives the profit of trading against the stress at the alarm and closing 1 or 5 minutes later, net of a 1-tick cost. The same is given for alarms after news, where fading is the wrong trade. Everything is in ticks of 0.25 points, and over 5 minutes the price also moves about ±24 ticks at random, so the standard errors matter.</p>
+  <p class="cap" id="edgeCap"></p>
+  <div class="tablewrap"><table id="edgeTab"></table></div>
+  <p class="read" id="edgeRead"></p>
+</section>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Limits and next steps</h2>
+  __LIMITS__
+</section>
+
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+const ALL = JSON.parse(document.getElementById('data').textContent);
+let D = ALL.runs['1.0'];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+__HELPERS__
+const f2 = v => v == null || !isFinite(v) ? '—' : v.toFixed(2);
+const pct = v => v == null ? '—' : Math.round(100 * v) + '%';
+const C = { deep: css('--deep'), cusum: css('--cusum'), flow: css('--flow') };
+const DET = [['DeepQCD', C.deep], ['WL-CUSUM', C.cusum], ['flow z-score', C.flow]];
+const POL = D.makers.map(m => m[5]);
+const PNAME = { instant: 'instant', twap: 'TWAP', skew: 'skew', gamma: 'short gamma', lean: 'lean', withdraw: 'withdrawal', news: 'news (label 0)' };
+const MMC = ['#0072B2', '#56B4E9', '#004D80', '#D55E00', '#E69F00', '#CC79A7'];
+
+// ---- market maker table
+function updTab() {
+  const foot = { instant: 'one-sided burst, price jump', twap: 'small persistent imbalance', skew: 'its size piles on one side of the inside', gamma: 'flow follows returns', lean: 'mild lean, slow', withdraw: 'thinner book' };
+  let h = '<tr><th>Maker</th><th>Quotes</th><th>Market</th><th class="num">Size</th><th class="num">Skew (pts per contract)</th><th>Stress policy</th><th class="w">Footprint</th></tr>';
+  const sc = D.settings.kappa_scale;
+  D.makers.forEach((m, i) => { h += `<tr><td><span class="ev" style="background:${MMC[i]}"></span>${m[0]}</td><td>${m[1]}</td><td>${m[2] === 0 ? '1 tick wide' : (2 * m[2]) + ' ticks wide'}</td><td class="num">${m[3]}</td><td class="num">${+(m[4] * sc).toPrecision(3)}</td><td>${PNAME[m[5]]}</td><td class="w">${foot[m[5]]}</td></tr>`; });
+  $('mmTab').innerHTML = h;
+}
+
+// ---- one day
+const step = 10;
+const chDayP = chart($('dayP'), (g, W, H) => {
+  const DY = D.day;
+  const n = DY.mid.length, xs = DY.mid.map((_, i) => i * step / 3600);
+  const lo = Math.min(...DY.mid), hi = Math.max(...DY.mid), pad = (hi - lo) * 0.06;
+  const P = frame(g, W, H, { x0: 0, x1: (n - 1) * step / 3600, y0: lo - pad, y1: hi + pad, ml: 56, mb: 20, xfmt: v => v + ' h' });
+  DY.events.forEach(e => band(g, P, e.start / 3600, Math.max(e.end, e.start + 30) / 3600));
+  line(g, P, xs, DY.mid, '#111', 1.2); P.restore();
+});
+const chDayD = chart($('dayD'), (g, W, H) => {
+  const DY = D.day;
+  const n = DY.d.length, xs = DY.d.map((_, i) => i * step / 3600);
+  const P = frame(g, W, H, { x0: 0, x1: (n - 1) * step / 3600, y0: 0, y1: 1, ml: 56, mb: 20, xfmt: v => v + ' h' });
+  DY.events.forEach(e => band(g, P, e.start / 3600, Math.max(e.end, e.start + 30) / 3600));
+  line(g, P, xs, DY.d, C.deep, 1.2); P.restore();
+});
+$('invLeg').innerHTML = D.makers.map((m, i) => `<span><i style="background:${MMC[i]}"></i>${m[0]} inventory</span>`).join('');
+const chDayI = chart($('dayI'), (g, W, H) => {
+  const DY = D.day;
+  const inv = DY.inventory, n = inv[0].length, xs = inv[0].map((_, i) => i * 30 / 3600);
+  let lo = 0, hi = 0; inv.forEach(r => r.forEach(v => { lo = Math.min(lo, v); hi = Math.max(hi, v); }));
+  const P = frame(g, W, H, { x0: 0, x1: (n - 1) * 30 / 3600, y0: lo * 1.05, y1: hi * 1.05, ml: 56, mb: 20, xfmt: v => v + ' h', ylabel: 'contracts' });
+  DY.events.forEach(e => band(g, P, e.start / 3600, Math.max(e.end, e.start + 30) / 3600));
+  inv.forEach((r, k) => line(g, P, xs, r, MMC[k], 1.3)); P.restore();
+});
+function updDay() {
+  [chDayP, chDayD, chDayI].forEach(render);
+  const DY = D.day, ev = DY.events, cnt = {}; ev.forEach(e => cnt[e.policy] = (cnt[e.policy] || 0) + 1);
+  $('dayRead').innerHTML = `Held-out day 1: ${ev.length} stress episodes (${Object.entries(cnt).map(([k, v]) => `${v} ${PNAME[k]}`).join(', ')}) and ${DY.news.length} news jumps. Shaded spans are stress episodes, label 1. The bottom panel shows each maker's inventory: a shock (a sudden step) is followed by that maker's unwind, at once for MM1, in a straight line for MM2, and faster or slower through passive fills for MM3 and MM5.`;
+}
+
+// ---- examples
+const exKeys = [...POL, 'news'];
+$('exS').innerHTML = exKeys.map((k, i) => `<button aria-pressed="${i === 0}" data-v="${k}">${PNAME[k]}</button>`).join('');
+const exV = seg('exS', upd3);
+function exChart(id, key, color, opts = {}) {
+  return chart($(id), (g, W, H) => {
+    const e = D.examples[exV()], ys = e[key], n = ys.length, xs = ys.map((_, i) => (i - 300) / 60);
+    let lo = Math.min(...ys), hi = Math.max(...ys); if (opts.y0 != null) lo = opts.y0; if (opts.y1 != null) hi = opts.y1; if (hi === lo) hi = lo + 1;
+    const pad = opts.y1 != null ? 0 : (hi - lo) * 0.08;
+    const P = frame(g, W, H, { x0: xs[0], x1: xs[n - 1], y0: lo - pad, y1: hi + pad, ml: 50, mb: 20, xfmt: v => (v > 0 ? '+' : '') + v + ' min' });
+    let s0 = -1; e.y.forEach((v, i) => { if (v && s0 < 0) s0 = i; if ((!v || i === n - 1) && s0 >= 0) { band(g, P, xs[s0], xs[i]); s0 = -1; } });
+    if (opts.bars) { g.fillStyle = color; ys.forEach((v, i) => { const X = P.sx(xs[i]), Y0 = P.sy(0), Y1 = P.sy(v); g.fillRect(X - 0.6, Math.min(Y0, Y1), 1.2, Math.abs(Y1 - Y0)); }); }
+    else line(g, P, xs, ys, color, 1.3);
+    P.restore();
+  });
+}
+const exCh = [exChart('exM', 'mid', '#111'), exChart('exV', 'sv', '#111', { bars: true }), exChart('exP', 'imb', '#111', { y0: -1, y1: 1 }), exChart('exD', 'd', C.deep, { y0: 0, y1: 1 })];
+function upd3() {
+  exCh.forEach(render);
+  const k = exV(), e = D.examples[k], ev = e.event;
+  const txt = {
+    instant: 'The maker sells or buys its whole position in a few seconds: a spike of signed volume and a step in price that later fades.',
+    twap: 'Equal child orders every second: the signed volume barely changes, the price drifts slowly. The hardest case to see.',
+    skew: 'The maker quotes only the exit side, through fair value: noise traders take its quotes, so the aggressors are on the other side, and the book leans.',
+    gamma: 'Hedging that buys after rises and sells after falls: signed volume follows the price, and moves get larger and longer.',
+    lean: 'A milder, slower version of the skew, by a wide maker.',
+    withdraw: 'The maker pulls its quotes: depth falls, with no trading of its own. The weakest footprint of the six.',
+    news: 'A news jump: informed traders push the price to its new value. Label 0. This is what a stress detector must not mistake for stress.',
+  };
+  $('exRead').innerHTML = `${PNAME[k]}${ev ? `: ${ev.mm}, ${ev.size ? ev.size + ' contracts to ' + (ev.side > 0 ? 'buy' : 'sell') + ', ' : ''}active for ${ev.end - ev.start} s` : ''}. ${txt[k]}`;
+}
+
+// ---- detection table and curves
+const aV = seg('aS', upd4);
+$('cvP').innerHTML = exKeys.map(k => `<option value="${k}">${PNAME[k]}</option>`).join('');
+$('cvP').addEventListener('change', upd4);
+const chCv = chart($('cvC'), (g, W, H) => {
+  const k = $('cvP').value, xmin = 1e-2;
+  const P = frame(g, W, H, { x0: 1, x1: xmin, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: k === 'news' ? 'alarm after news' : 'PD', ml: 40 });
+  DET.forEach(([n, col]) => { const c = D.detectors[n].curves[k]; line(g, P, c.pfa.map(v => Math.max(v, xmin)), c.pd, col, 2); });
+  P.restore();
+});
+function upd4() {
+  render(chCv);
+  const a = aV();
+  let h = '<tr><th>Stress policy</th>' + DET.map(([n]) => `<th class="num">${n}</th>`).join('') + '<th class="num">delay, DeepQCD</th></tr>';
+  for (const k of exKeys) {
+    const vals = DET.map(([n]) => D.detectors[n].at[a][k].pd), best = Math.max(...vals);
+    const dl = D.detectors.DeepQCD.at[a][k].delay_median;
+    h += `<tr${k === 'news' ? ' class="mid"' : ''}><td>${PNAME[k]}</td>` + vals.map(v => `<td class="num${v === best && k !== 'news' && v > 0 ? ' win' : ''}">${f2(v)}</td>`).join('') + `<td class="num">${dl == null ? '—' : Math.round(dl) + ' s'}</td></tr>`;
+  }
+  $('detTab').innerHTML = h;
+  $('detCap').innerHTML = `Probability of detecting each stress policy within K = ${D.settings.K} s, with each detector's threshold set for a pooled false-alarm probability of α = ${a}. The last row is the probability of alarming within K seconds after a news jump, which a stress detector should keep low. "Delay" is DeepQCD's median time from onset to alarm among its detections.`;
+  const k = $('cvP').value;
+  $('cvRead').innerHTML = k === 'news' ? 'For news-only streams the curve shows how often each detector alarms in the two minutes after a news jump, against its false-alarm probability before it. Lower is better here.' : `${PNAME[k]}: PD against PFA over the ${D.settings.n_streams} streams of this policy, one point per threshold (the paper's Fig. 9). Higher is better at the same PFA.`;
+}
+
+// ---- edge
+function updEdge() {
+  const cols = [['gap_at_alarm', 'price from value at alarm'], ['fade_60', 'fade, 1 min'], ['fade_300', 'fade, 5 min']];
+  let h = '<tr><th>Detector</th><th>Stream</th><th class="num">n</th>' + cols.map(c => `<th class="num">${c[1]}</th>`).join('') + '<th class="num">mean delay</th></tr>';
+  for (const [n] of DET) for (const k of ['instant', 'twap', 'skew', 'lean', 'news']) {
+    const e = D.detectors[n].edge[k];
+    const cell = (c) => e[c] == null ? '—' : `${e[c] >= 0 ? '+' : ''}${e[c].toFixed(1)}${e[c + '_se'] != null ? ` <span class="note">± ${e[c + '_se'].toFixed(1)}</span>` : ''}`;
+    h += `<tr${k === 'instant' ? ' class="mid"' : ''}><td>${k === 'instant' ? n : ''}</td><td>${PNAME[k]}</td><td class="num">${e.n}</td>` + cols.map(c => `<td class="num">${cell(c[0])}</td>`).join('') + `<td class="num">${e.delay_mean == null ? '—' : Math.round(e.delay_mean) + ' s'}</td></tr>`;
+  }
+  $('edgeTab').innerHTML = h;
+  $('edgeCap').innerHTML = 'Means over the detections at α = 0.05 (n), in ticks, with standard errors. "Price from value at alarm": how far the stressed flow (or the news) had moved the price from value, in its own direction; positive means the price still has that much to give back. "Fade": profit of trading against the stress (or the news) at the alarm and closing 1 or 5 minutes later, minus 1 tick.';
+  $('edgeRead').innerHTML = (ALL.edgeread || {})[D.settings.kappa_scale.toFixed(2)] || '';
+}
+
+const scV = seg('scS', v => { D = ALL.runs[v]; updAll(); });
+function updAll() { updTab(); updDay(); upd3(); upd4(); updEdge(); }
+updAll();
+})();
+</script>
