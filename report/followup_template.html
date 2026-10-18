@@ -1,0 +1,306 @@
+<title>Rare Events and Polymarket</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+:root { --price: #555555; }
+.stat .v small { font-size: 13px; color: var(--muted); font-family: var(--sans); }
+td.bad { color: var(--no); font-weight: 600; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <p>Two follow-ups to the finance discussion, both built on the original DeepQCD code (the network, its training and the window-limited CUSUM, from <span class="mono">original_qcd.py</span>). Code: <a href="__REPO__/blob/__BRANCH__/rare_prior.py">rare_prior.py</a>, <a href="__REPO__/blob/__BRANCH__/polymarket_fetch.py">polymarket_fetch.py</a>, <a href="__REPO__/blob/__BRANCH__/polymarket_qcd.py">polymarket_qcd.py</a>; notes: <a href="__REPO__/blob/__BRANCH__/notes/rare-events.md">rare-events.md</a>, <a href="__REPO__/blob/__BRANCH__/notes/polymarket.md">polymarket.md</a>.</p>
+  <ul class="tight">
+    <li><b>A. Rare changes (credit, money laundering, delinquency).</b> Can DeepQCD be trained where changes are common and used where they are ten times rarer? For detection, yes: the network trained at the paper's rate ρ = 10⁻³ and run at ρ = 10⁻⁴ is within one step of the optimal Shiryaev rule at every false-alarm level. Its output is not the deployment posterior, though. Read as a probability it over-alarms. The theoretical prior correction alone over-corrects 25-fold. Calibrating on the enriched data and then applying the correction gives a valid threshold, about twice as conservative as the exact posterior.</li>
+    <li><b>B. Polymarket (money before the news).</b> In "X by &lt;date&gt;?" markets, does large-trade flow show an event before the price does? We took __NMK__ closed markets with at least $100,000 volume: hourly prices and every trade of $1,000 or more, about 3.1 million market-hours. Only __NEV__ distinct events were surprises with a week of history before them. On the __NTE__ held-out events, at PFA 0.05, DeepQCD alarms in the 24 hours before the public move for 40% of them (20–53% over three seeds). A rule on the 24-hour price rise catches 43%. Buying YES at DeepQCD's alarms earns less than buying at random hours. Trading picks up before events, but its direction follows the price rather than leading it.</li>
+  </ul>
+</section>
+
+<div class="part">A · Rare changes</div>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Training rate and deployment rate</h2>
+  <p>In credit default, money laundering or delinquency, the change (an account going bad) is rare, perhaps one in ten thousand account-days. Labelled histories are easiest to obtain from enriched samples, in which bad accounts are over-represented. DeepQCD learns the Bayesian posterior P(τ ≤ t | x₁ … x<sub>t</sub>), and that posterior depends on the change rate ρ. For small ρ, the posterior odds are close to ρ times the Shiryaev–Roberts statistic, so moving from the training rate ρ<sub>tr</sub> to the deployment rate ρ<sub>dep</sub> shifts the log-odds by a constant:</p>
+  <p style="text-align:center">logit p<sub>dep</sub> = logit p<sub>tr</sub> + log(ρ<sub>dep</sub> / ρ<sub>tr</sub>).</p>
+  <p>The shift is monotone, so training at the wrong rate should not change which stopping rules are available: the PFA–ADD curve stays the same. But the rule "stop when the posterior reaches 1 − α", which promises PFA ≤ α, works only if the posterior is right for the deployment rate. For the exact posterior the shift is exact. Shiryaev(10⁻³) shifted by log 0.1 stops with PFA 0.059 / 0.029 / 0.0057 at α = 0.1 / 0.05 / 0.01, and Shiryaev(10⁻⁴) with 0.058 / 0.028 / 0.0057.</p>
+  <p><b>Experiment.</b> The paper's §5.1 with p = 1, f₀ = N(0, 1) and f₁ = N(1, 1). Network and training are exactly those of the notebooks: 3,200 streams of 2,000 steps, 20 epochs. Network A is trained with τ ~ geo(10⁻³), the paper's rate, so 85% of its streams contain a change. Network B is trained with τ ~ geo(10⁻⁴) on the same budget; 18% of its streams contain a change. The deployment test uses τ ~ geo(10⁻⁴), truncated at 60,000 steps, over 3,000 streams. The references are the optimal Shiryaev(10⁻⁴) and the misspecified Shiryaev(10⁻³). "Calibrated" means a logistic fit, logit P(τ ≤ t) = a · logit d<sub>t</sub> + b, on 500 labelled streams at the training rate. It uses enriched data only (a = __PA__, b = __PB__).</p>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD A (trained at 10⁻³)</span><span><i class="dash" style="color:var(--deep)"></i>DeepQCD B (trained at 10⁻⁴)</span><span><i style="background:var(--shiryaev)"></i>Shiryaev(10⁻⁴), optimal</span><span><i class="dash" style="color:var(--shiryaev)"></i>Shiryaev(10⁻³), wrong prior</span></div>
+      <canvas class="chart tall" id="rcC" role="img" aria-label="ADD against PFA at the deployment rate for the two networks and the two Shiryaev rules"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read">Detection at the deployment rate ρ = 10⁻⁴: average detection delay against PFA, one point per threshold. The four curves agree to within one step: at PFA 0.01 the ADD is 22.5 for A, 23.2 for B, 22.3 for the optimal rule and 22.4 for the rule with the wrong prior. A network trained where changes are ten times more common loses nothing. The rate matters only for <i>which threshold</i> gives a given PFA (Table 1).</p></div>
+  </div>
+  <p class="cap">Stopping when the posterior reaches 1 − α, at the deployment rate. Each cell is the realized PFA, then the ADD. Red marks a PFA above the promised α.</p>
+  <div class="tablewrap"><table id="ruleTab"></table></div>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="relL">reliability of</span><span class="seg" role="group" aria-labelledby="relL" id="relS"><button aria-pressed="true" data-v="DeepQCD A (enriched)">A, raw</button><button aria-pressed="false" data-v="DeepQCD A, prior-corrected">A, shifted</button><button aria-pressed="false" data-v="DeepQCD A, calibrated + prior-corrected">A, calibrated + shifted</button><button aria-pressed="false" data-v="DeepQCD B (true rate)">B, raw</button></span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i class="ring" style="color:var(--deep)"></i><span id="relName">A, raw</span></span><span><i class="ring" style="color:var(--shiryaev)"></i>Shiryaev(10⁻⁴), exact</span><span><i class="dash" style="color:var(--faint)"></i>calibrated</span></div>
+      <canvas class="chart tall" id="relC" role="img" aria-label="Reliability diagram: predicted posterior against the observed frequency of a change having occurred"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read" id="relRead"></p></div>
+  </div>
+  <ul class="tight">
+    <li><b>Detection does not depend on the training rate.</b> So the network can be trained where labelled changes exist.</li>
+    <li><b>The raw output over-alarms.</b> Read as a probability, A's output gives PFA 0.137 at α = 0.1.</li>
+    <li><b>The prior shift alone over-corrects.</b> It gives PFA 0.004 at α = 0.1 and ADD 24 where 17.5 is possible. The shift is exact only for an exact posterior, and the network is not calibrated even at its own training rate: its log-odds are too low by about 0.9.</li>
+    <li><b>Calibrate on the enriched data, then shift.</b> Calibrated, A behaves like the exact posterior at its training rate (PFA 0.385 against 0.384 for Shiryaev(10⁻³) at α = 0.1). Shifted, it gives PFA 0.028 / 0.010 / 0.002, all below α. Neither step needs labelled data at the rare rate. It stays conservative because a two-parameter fit cannot follow the network's curve above about 0.8.</li>
+    <li><b>Training at the true rate does not help.</b> Network B, which saw few changes, is as under-confident as "shifted only".</li>
+    <li><b>For a bank.</b> Train on enriched data. If held-out data at the true rate exists, set the threshold for the target false-alarm rate on it. Otherwise calibrate on enriched data and shift, and the rule will err on the safe side. ρ<sub>dep</sub> has to be estimated: an error by a factor c moves the threshold by log c.</li>
+  </ul>
+</section>
+
+<div class="part">B · Polymarket</div>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Why a deadline market is a transient change</h2>
+  <p>A deadline market asks whether something happens before a date, for example "US strikes Iran by March 31?". Its YES price is the market's probability. If the event happens, the market resolves YES at once and the price jumps to about 1. If the date passes, it resolves NO. Suppose some traders learn of the event before the public does. Their buying would push the flow toward YES in the hours before the jump: a change that starts at an unknown time and ends at the public move. A market that resolves NO never has this change. So every market is a stream with or without a transient change, and the paper's transient protocol applies.</p>
+  <figure class="diag">
+    <div class="diagwrap">
+    <svg viewBox="0 0 820 170" role="img" aria-label="Timeline of one test stream: 168 hours ending at the public move tau_pub. The first 24 hours start the CUSUM window; an alarm from hour 24 to tau_pub minus 24 hours is a false alarm; an alarm in the last 24 hours is a detection; the price must stay below 0.5 before the window." font-family="Source Sans 3, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="currentColor">
+      <defs><marker id="tA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect x="640" y="30" width="120" height="70" fill="rgba(0,0,0,.065)" stroke="#7A7A7A" stroke-dasharray="3 3"/>
+      <rect x="40" y="30" width="120" height="70" fill="#F6F6F6" stroke="none"/>
+      <g fill="none" stroke="currentColor" stroke-width="1.3">
+        <line x1="40" y1="100" x2="790" y2="100" marker-end="url(#tA)"/>
+        <line x1="40" y1="95" x2="40" y2="105"/><line x1="160" y1="95" x2="160" y2="105"/><line x1="640" y1="95" x2="640" y2="105"/><line x1="760" y1="20" x2="760" y2="105"/>
+        <polyline points="40,82 90,80 140,84 200,79 260,83 320,81 380,85 440,80 500,82 560,79 620,81 650,78 680,74 710,70 740,62 760,58" stroke="#111" stroke-width="1.6"/>
+        <polyline points="760,58 764,24 790,22" stroke="#111" stroke-width="1.6"/>
+        <line x1="40" y1="52" x2="640" y2="52" stroke-dasharray="5 4" stroke="#8A8A8A"/>
+        <line x1="40" y1="30" x2="790" y2="30" stroke-dasharray="2 3" stroke="#8A8A8A"/>
+      </g>
+      <g text-anchor="middle">
+        <text x="100" y="124">CUSUM warm-up</text><text x="100" y="140" font-size="11">hours 0–23</text>
+        <text x="400" y="124">no event yet: an alarm here is a <tspan font-weight="600">false alarm</tspan></text><text x="400" y="140" font-size="11">hours 24–143</text>
+        <text x="700" y="124">alarm here = <tspan font-weight="600">detection</tspan></text><text x="700" y="140" font-size="11">last W = 24 h</text>
+        <text x="640" y="160" font-size="12">τ₁ = τ<tspan font-size="9" dy="3">pub</tspan><tspan dy="-3"> − 24 h</tspan></text>
+        <text x="756" y="16" font-size="12" text-anchor="end">τ<tspan font-size="9" dy="3">pub</tspan><tspan dy="-3">: price ≥ 0.8 from here on</tspan></text>
+      </g>
+      <g font-size="11" font-style="italic">
+        <text x="46" y="48">price below 0.5 before the window ("surprise")</text>
+        <text x="46" y="70">YES price</text>
+      </g>
+      <g font-size="11" text-anchor="end" fill="#8A8A8A">
+        <text x="36" y="34">0.8</text><text x="36" y="56">0.5</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption class="read">One change stream. τ<sub>pub</sub> is the first hour after which the YES price stays at or above 0.8 until the market closes: the event is public. The stream is the 168 hours before it. The change window is the last 24 hours, the time in which informed buying, if any, should show. Only surprises are used: the price stayed below 0.5 for the first 144 hours. Otherwise the market already knew. No-change streams are consecutive 168-hour windows of NO markets and the earlier weeks of YES markets. PFA is the probability of an alarm before τ₁ in any stream. PD is the probability that an event stream's first alarm falls in the window. The labels come from prices in hindsight. The 24-hour window is our choice, and informed trading, if it exists, could start earlier or not at all.</figcaption>
+  </figure>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Data</h2>
+  <p>We used Polymarket's public APIs, with no key: the market list (gamma API), hourly YES prices (CLOB <span class="mono">prices-history</span>) and every taker trade of at least $1,000 with its wallet (data API <span class="mono">trades</span>), as described in the <a href="https://docs.polymarket.com">API documentation</a>. We kept closed binary markets whose question has a deadline ("by" or "before" a date; ranges such as "between" excluded) and at least $100,000 volume, from February 2023 to October 2026. Ladder markets that went public within 12 hours of each other count as one event, for example "US strikes Iran by February 28 / March 1 / March 15". Each event enters the test once, through its largest market. Training uses all of an event's markets, plus seven copies of each stream ending 3, 6, …, 21 hours before τ<sub>pub</sub>. The split is by time: markets that closed before __SPLIT__ train the detectors, the rest test them.</p>
+  <div class="stats" id="pmStats"></div>
+  <p class="cap">The eight hourly features. Flows are signed toward YES: buying YES or selling NO counts as positive.</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>Feature</th><th class="w">Definition</th></tr>
+    <tr><td>0</td><td>price</td><td class="w">YES price at the end of the hour</td></tr>
+    <tr><td>1</td><td>Δ logit price</td><td class="w">change of logit(price) from the previous hour</td></tr>
+    <tr><td>2</td><td>flow</td><td class="w">net large-trade money toward YES, sign · log(1 + |$| / 1,000)</td></tr>
+    <tr><td>3</td><td>gross</td><td class="w">log(1 + large-trade volume / $1,000)</td></tr>
+    <tr><td>4</td><td>trades</td><td class="w">log(1 + number of large trades)</td></tr>
+    <tr><td>5</td><td>new-wallet flow</td><td class="w">net flow of wallets trading this market for the first time</td></tr>
+    <tr><td>6</td><td>fresh-wallet flow</td><td class="w">net flow of wallets first seen in any of our markets within the last 7 days</td></tr>
+    <tr><td>7</td><td>concentration</td><td class="w">the largest wallet's share of large-trade volume over the last 24 hours</td></tr>
+  </table></div>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Detection</h2>
+  <ul class="tight">
+    <li><b>DeepQCD</b>: the paper's network and training (LSTM(16) → Dense(10) → Dense(1), Adam, cross-entropy, batch 32, 20 epochs), with label 1 in the change window. It is trained on all eight features, and separately without the two price features ("flow only"), with three seeds each. Features are standardized on no-change training hours, as in the IoT script.</li>
+    <li><b>Window-limited CUSUM</b>: <span class="mono">window_dec_stat</span> over the last K = 24 hours, on the Gaussian log-likelihood direction of the change window against the rest of the training data. Again with all features, and flow only.</li>
+    <li><b>Price rules</b>: the YES price itself, and its rise over the last 24 hours.</li>
+  </ul>
+  <p class="cap" id="detCap"></p>
+  <div class="tablewrap"><table id="detTab"></table></div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD</span><span><i class="dash" style="color:var(--deep)"></i>DeepQCD, flow only</span><span><i style="background:var(--cusum)"></i>WL-CUSUM</span><span><i class="dash" style="color:var(--cusum)"></i>WL-CUSUM, flow only</span><span><i style="background:var(--price)"></i>price level</span><span><i class="dash" style="color:var(--price)"></i>price rise, 24 h</span></div>
+      <canvas class="chart tall" id="pmC" role="img" aria-label="PD against PFA on the held-out Polymarket events for six detectors"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read">PD against PFA on the __NTE__ held-out events and __NNO__ no-change streams, one point per threshold (the paper's Fig. 9). Each DeepQCD network is drawn for its three seeds: seed 0 thick, seeds 1 and 2 thin. With __NTE__ events, one event is 0.033 of PD and the standard error of a PD near 0.4 is about 0.09. The seeds differ by more than the detectors do: at PFA 0.05, flow-only DeepQCD is the best detector with seed 0 (0.67) and among the worst with seeds 1 and 2 (0.17, 0.07). Averaged over seeds, DeepQCD is level with the 24-hour price rise (0.40 against 0.43), and the flow-only CUSUM is the weakest.</p></div>
+  </div>
+  <div class="controls">
+    <div class="ctl" style="min-width:0;flex:1 1 auto"><label for="evS">held-out event</label><select id="evS" style="min-width:0;width:100%;max-width:560px;text-overflow:ellipsis"></select></div>
+  </div>
+  <div class="plots">
+    <div class="plotlabel"><b>YES price</b><span>dashed: 0.8</span></div>
+    <canvas class="chart short" id="evP" role="img" aria-label="YES price over the 7 days before the public move"></canvas>
+    <div class="plotlabel"><b>net large-trade flow toward YES</b><span>sign · log(1 + |$| / 1,000) per hour</span></div>
+    <canvas class="chart short" id="evF" role="img" aria-label="Hourly signed large-trade flow"></canvas>
+    <div class="plotlabel"><b>DeepQCD statistic d<sub>t</sub></b><span>dashed: threshold at PFA 0.05</span></div>
+    <canvas class="chart short" id="evD" role="img" aria-label="DeepQCD statistic with its threshold"></canvas>
+  </div>
+  <p class="read" id="evRead"></p>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Does the money move before the price?</h2>
+  <p class="cap">Large trades per hour, in the held-out data. "Net toward YES" is net large-trade money toward YES divided by gross large-trade money (−1: all toward NO, +1: all toward YES).</p>
+  <div class="tablewrap"><table id="actTab"></table></div>
+  <p>Event markets are busier than others even a week before the event, because they are the markets in the news. Activity jumps again in the last 24 hours, to about ten times its level earlier that week. The net direction of large trades moves from leaning toward NO to balanced, but the price rises at the same time (from 0.16 to 0.25 on average). Wallets that are new to a market, or new to Polymarket, do not lean toward YES before events. In hourly aggregates the flow moves with the price, not ahead of it.</p>
+  <p>The test that matters for a trader: buy YES at a detector's first alarm, provided the price is still below 0.8, and hold to resolution, paying 1 cent. Each held-out market trades at most once, with each detector's threshold from Table __TDET__. If the alarms knew something the price did not, they would beat buying at a random hour.</p>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="btL">threshold at PFA</span><span class="seg" role="group" aria-labelledby="btL" id="btS"><button aria-pressed="false" data-v="0.01">0.01</button><button aria-pressed="true" data-v="0.05">0.05</button><button aria-pressed="false" data-v="0.1">0.10</button></span></div>
+  </div>
+  <p class="cap" id="btCap"></p>
+  <div class="tablewrap"><table id="btTab"></table></div>
+  <p>No detector beats random entry. In this period YES was cheap on average (+5.7 cents per contract at random hours), because many of the war-related events in 2026 did happen. Alarms from the price rise lose heavily: most price run-ups are scares that fade. DeepQCD with all features inherits part of that. Flow-only alarms are about break-even. Nothing in the hourly large-trade data is worth more than the price already says.</p>
+</section>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Verdict and next steps</h2>
+  <ul class="tight">
+    <li><b>Feasibility: weak.</b> At hourly resolution with trades of $1,000 or more, there is no sign of systematic informed flow before public events that a detector could exploit. The price is already the best summary.</li>
+    <li><b>Too few events.</b> There are __NEV__ surprise events in three and a half years, concentrated in 2026 and in a few themes (Iran, Venezuela, Russia–Ukraine), with 34 left for training. The three DeepQCD seeds give PD 0.47, 0.20 and 0.53 at PFA 0.05 (flow only: 0.67, 0.17, 0.07), so the network is not stable at this sample size.</li>
+    <li><b>What could still work.</b> Minute-level data with every trade, around the publicly reported cases of suspected insider bets. Wallet-level features, such as a wallet's past accuracy, instead of hourly totals. Pooling with Kalshi. Or surveillance instead of trading: the activity surge before events is real, and an exchange could flag markets for review with it.</li>
+    <li><b>Use.</b> Trading on material non-public information is illegal in many markets. The aim here is detection, for market surveillance.</li>
+  </ul>
+</section>
+
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+const ALL = JSON.parse(document.getElementById('data').textContent);
+const R = ALL.rare, M = ALL.pm;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+__HELPERS__
+const C = { deep: css('--deep'), cusum: css('--cusum'), shir: css('--shiryaev'), price: css('--price'), faint: css('--faint') };
+const lg = p => Math.log(p / (1 - p));
+
+// ---- A: ADD-PFA curves
+const RC = [['DeepQCD A (enriched)', C.deep, null], ['DeepQCD B (true rate)', C.deep, [6, 4]], ['Shiryaev(1e-4), optimal', C.shir, null], ['Shiryaev(1e-3), wrong prior', C.shir, [6, 4]]];
+const chRc = chart($('rcC'), (g, W, H) => {
+  const P = frame(g, W, H, { x0: 0.5, x1: 1e-3, xlog: true, y0: 5, y1: 45, xlabel: 'PFA (stricter →)', ylabel: 'ADD', ml: 44 });
+  RC.forEach(([n, col, dash]) => { const c = R.curves[n]; const k = c.pfa.map((v, i) => i).filter(i => c.pfa[i] > 0); line(g, P, k.map(i => c.pfa[i]), k.map(i => c.add[i]), col, 2, dash); });
+  P.restore();
+});
+
+// ---- A: rule table
+(() => {
+  const rows = [['Shiryaev(1e-4), optimal', 'Shiryaev(10⁻⁴), exact posterior'], ['Shiryaev(1e-3), wrong prior', 'Shiryaev(10⁻³), wrong prior'], ['DeepQCD A (enriched)', 'A, raw'], ['DeepQCD A, prior-corrected', 'A, shifted by log 0.1'], ['DeepQCD A, calibrated', 'A, calibrated (no shift)'], ['DeepQCD A, calibrated + prior-corrected', 'A, calibrated, then shifted'], ['DeepQCD B (true rate)', 'B, raw']];
+  const al = ['0.1', '0.05', '0.01', '0.001'];
+  let h = '<tr><th>Posterior</th>' + al.map(a => `<th class="num">α = ${a}</th>`).join('') + '</tr>';
+  rows.forEach(([k, lab], i) => {
+    h += `<tr${i === 2 ? ' class="mid"' : ''}><td>${lab}</td>` + al.map(a => { const r = R.rule[k][a]; const bad = r.pfa > +a; return `<td class="num${bad ? ' bad' : ''}">${r.pfa < 0.001 && r.pfa > 0 ? r.pfa.toFixed(4) : r.pfa.toFixed(3)}, ${r.add.toFixed(1)}</td>`; }).join('') + '</tr>';
+  });
+  $('ruleTab').innerHTML = h;
+})();
+
+// ---- A: reliability
+const relTicks = [0.02, 0.1, 0.5, 0.9, 0.99, 0.999];
+const relV = seg('relS', updRel);
+const chRel = chart($('relC'), (g, W, H) => {
+  const lo = lg(0.015), hi = lg(0.9995);
+  const P = frame(g, W, H, { x0: lo, x1: hi, y0: lo, y1: hi, xticks: relTicks.map(lg), yticks: relTicks.map(lg), xfmt: v => String(+(1 / (1 + Math.exp(-v))).toPrecision(3)), yfmt: v => String(+(1 / (1 + Math.exp(-v))).toPrecision(3)), xlabel: 'predicted P(change has occurred)', ylabel: 'observed frequency', ml: 50 });
+  line(g, P, [lo, hi], [lo, hi], C.faint, 1.2, [5, 4]);
+  const pts = (n, col) => { const s = R.reliability[n].filter(r => r[0] >= 0.015 && r[0] <= 0.9995); const xs = s.map(r => lg(r[0])), ys = s.map(r => lg(Math.min(Math.max(r[1], 1e-4), 0.9995))); line(g, P, xs, ys, col, 1.4); xs.forEach((x, i) => dot(g, P, x, ys[i], col, 4)); };
+  pts('Shiryaev(1e-4), optimal', C.shir); pts(relV(), C.deep);
+  P.restore();
+});
+function updRel() {
+  render(chRel);
+  const k = relV(), lab = { 'DeepQCD A (enriched)': 'A, raw', 'DeepQCD A, prior-corrected': 'A, shifted', 'DeepQCD A, calibrated + prior-corrected': 'A, calibrated + shifted', 'DeepQCD B (true rate)': 'B, raw' }[k];
+  $('relName').textContent = lab;
+  const txt = {
+    'DeepQCD A (enriched)': 'A, raw: its output is calibrated for ρ = 10⁻³, so at 10⁻⁴ it says a change is about ten times likelier than it is (points below the diagonal).',
+    'DeepQCD A, prior-corrected': 'A shifted by log 0.1: now the points lie above the diagonal. The network was under-confident to begin with, so the full theoretical shift over-corrects, and stopping at 1 − α becomes far too cautious.',
+    'DeepQCD A, calibrated + prior-corrected': 'A calibrated on enriched data, then shifted: on the diagonal up to about 0.8, close to the exact posterior. Above that it is still under-confident, so the rule stays on the safe side.',
+    'DeepQCD B (true rate)': 'B, trained at the true rate: well above the diagonal. With few changes in its training data it learned to say "no change" too readily.',
+  }[k];
+  $('relRead').innerHTML = `Reliability at the deployment rate: over 400 streams of 30,000 steps, the predicted posterior is binned by its log-odds, and each bin is plotted against the fraction of its time steps that come after the change. A calibrated posterior lies on the diagonal. The exact Shiryaev(10⁻⁴) posterior is shown for reference; it sits slightly above the diagonal at the top because this test truncates τ at 28,000 steps. ${txt}`;
+}
+
+// ---- B: stats
+(() => {
+  const ev = M.n_events;
+  const st = [['markets', `${M.n_markets.toLocaleString('en-US')} <small>${M.n_yes} YES</small>`], ['surprise events', `${ev.all_events} <small>in ${(ev.train_markets + ev.test_markets)} markets</small>`],
+    ['training', `${ev.train_events} events <small>${M.n_train_markets} markets</small>`], ['test', `${ev.test_events} events <small>${M.n_test_markets.toLocaleString('en-US')} markets</small>`],
+    ['no-change test streams', M.n_test_no.toLocaleString('en-US')], ['training streams', M.n_train_streams.toLocaleString('en-US')]];
+  $('pmStats').innerHTML = st.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+})();
+
+// ---- B: detection table and curves
+const DT = [['DeepQCD, all features', 'DeepQCD', C.deep, null], ['DeepQCD, flow only', 'DeepQCD, flow only', C.deep, [6, 4]], ['WL-CUSUM, all features', 'WL-CUSUM', C.cusum, null], ['WL-CUSUM, flow only', 'WL-CUSUM, flow only', C.cusum, [6, 4]], ['Price level', 'price level', C.price, null], ['Price rise over 24 h', 'price rise over 24 h', C.price, [6, 4]]];
+(() => {
+  const al = ['0.01', '0.05', '0.1'];
+  let h = '<tr><th>Detector</th>' + al.map(a => `<th class="num">PD at PFA ${a}</th>`).join('') + '<th class="num">median lead at 0.05</th></tr>';
+  DT.forEach(([k, lab], i) => {
+    const d = M.detectors[k];
+    h += `<tr${i === 2 || i === 4 ? ' class="mid"' : ''}><td>${lab}</td>` + al.map(a => { const s = d.pd_at_seeds ? ` <span class="note">(${d.pd_at_seeds[a].map(v => v.toFixed(2)).join(', ')})</span>` : ''; return `<td class="num">${d.pd_at[a].toFixed(2)}${s}</td>`; }).join('') + `<td class="num">${d.lead_at['0.05'] == null ? '—' : d.lead_at['0.05'] + ' h'}</td></tr>`;
+  });
+  $('detTab').innerHTML = h;
+  $('detCap').innerHTML = `Held-out detection (${M.n_events.test_events} events, ${M.n_test_no.toLocaleString('en-US')} no-change streams): probability of a first alarm in the 24 hours before the public move, at the threshold that keeps PFA at or below the given level (the paper's Eq. 11). For DeepQCD the mean of three seeds, with each seed in brackets. "Lead" is the median number of hours from alarm to τ<sub>pub</sub> among detections (DeepQCD: seed 0).`;
+})();
+const chPm = chart($('pmC'), (g, W, H) => {
+  const xmin = 5e-3;
+  const P = frame(g, W, H, { x0: 1, x1: xmin, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: 'PD', ml: 40 });
+  DT.forEach(([k, , col, dash]) => { const c = M.detectors[k]; (c.curves_other_seeds || []).forEach(s => line(g, P, s.pfa.map(v => Math.max(v, xmin)), s.pd, col, 1, dash)); line(g, P, c.pfa.map(v => Math.max(v, xmin)), c.pd, col, 2.2, dash); });
+  P.restore();
+});
+
+// ---- B: example events
+const EV = M.events, hD = M.detectors['DeepQCD, all features'].h_at['0.05'];
+$('evS').innerHTML = EV.map((e, i) => `<option value="${i}">${new Date(e.tau_pub_utc * 1000).toISOString().slice(0, 10)} · ${e.q}</option>`).join('');
+const xsH = range(M.L).map(i => i - M.L);
+function evChart(id, key, color, opts = {}) {
+  return chart($(id), (g, W, H) => {
+    const e = EV[+$('evS').value], ys = e[key];
+    let lo = opts.y0 ?? Math.min(...ys), hi = opts.y1 ?? Math.max(...ys); if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
+    const pad = opts.y1 != null ? 0 : (hi - lo) * 0.08;
+    const P = frame(g, W, H, { x0: -M.L, x1: 0, y0: lo - pad, y1: hi + pad, ml: 50, mb: 20, xticks: W < 520 ? [-168, -120, -72, -24, 0] : [-168, -144, -120, -96, -72, -48, -24, 0], xfmt: v => v === 0 ? 'τ_pub' : v + ' h' });
+    band(g, P, -M.W, 0);
+    if (opts.bars) { ys.forEach((v, i) => { if (!v) return; g.fillStyle = v > 0 ? css('--yes') : css('--no'); const X = P.sx(xsH[i]), Y0 = P.sy(0), Y1 = P.sy(v); g.fillRect(X - 1.2, Math.min(Y0, Y1), 2.4, Math.max(1, Math.abs(Y1 - Y0))); }); line(g, P, [-M.L, 0], [0, 0], C.faint, 1); }
+    else line(g, P, xsH, ys.map((v, i) => i < (opts.from || 0) ? null : v), color, 1.5);
+    if (opts.h != null) hline(g, P, opts.h, '#111');
+    P.restore();
+  });
+}
+const evCh = [evChart('evP', 'p', '#111', { y0: 0, y1: 1, h: 0.8 }), evChart('evF', 'flow', '#111', { bars: true }), evChart('evD', 'd', C.deep, { y0: 0, y1: 1, h: hD, from: M.K })];
+function updEv() {
+  evCh.forEach(render);
+  const e = EV[+$('evS').value], d = e.d, p = e.p;
+  let fa = -1; for (let i = M.K; i < M.L; i++) if (d[i] >= hD) { fa = i; break; }
+  const t1 = M.L - M.W;
+  const out = fa < 0 ? 'DeepQCD (seed 0) never alarms: a missed event.' : fa < t1 ? `DeepQCD alarms ${M.L - fa} hours before τ<sub>pub</sub>, before the window: a false alarm on this stream.` : `DeepQCD alarms ${M.L - fa} hours before τ<sub>pub</sub>, inside the window, with the price at ${p[fa].toFixed(2)}: a detection.`;
+  $('evRead').innerHTML = `“${e.q}” ($${(e.volume / 1e6).toFixed(1)}M traded). The 7 days before the price settled above 0.8 (${new Date(e.tau_pub_utc * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC). The shaded band is the change window. Flow bars are green toward YES and red toward NO. In the last hour the price was ${p[M.L - 1].toFixed(2)}${p[M.L - 1] < 0.4 ? ', so the event became public in a single jump' : ''}. ${out}`;
+}
+$('evS').addEventListener('change', updEv);
+
+// ---- B: activity
+(() => {
+  const A = M.activity, cols = [['no event', 'no event'], ['event, days 2-7 before', 'event market, days 2–7 before'], ['event, last 24 h', 'event market, last 24 h']];
+  const rows = [['hours', 'hours', v => v.toLocaleString('en-US')], ['price', 'mean YES price', v => v.toFixed(2)], ['share_hours_with_trade', 'hours with a large trade', v => Math.round(100 * v) + '%'], ['trades_per_hour', 'large trades per hour', v => v.toFixed(2)], ['usd_per_hour', 'large-trade $ per hour', v => '$' + Math.round(v).toLocaleString('en-US')], ['net_toward_yes', 'net toward YES, all wallets', v => (v > 0 ? '+' : '') + v.toFixed(2)], ['new_wallets_net_toward_yes', 'net toward YES, wallets new to the market', v => (v > 0 ? '+' : '') + v.toFixed(2)], ['fresh_wallets_net_toward_yes', 'net toward YES, wallets new to Polymarket', v => (v > 0 ? '+' : '') + v.toFixed(2)]];
+  let h = '<tr><th></th>' + cols.map(c => `<th class="num w">${c[1]}</th>`).join('') + '</tr>';
+  rows.forEach(([k, lab, f], i) => { h += `<tr${i === 5 ? ' class="mid"' : ''}><td>${lab}</td>` + cols.map(c => `<td class="num">${f(A[c[0]][k])}</td>`).join('') + '</tr>'; });
+  $('actTab').innerHTML = h;
+})();
+
+// ---- B: backtest
+const btV = seg('btS', updBt);
+function updBt() {
+  const a = btV(), rd = M.backtest_random;
+  const cell = b => b.n ? `<td class="num">${b.n}</td><td class="num">${(100 * b.mean >= 0 ? '+' : '') + (100 * b.mean).toFixed(1)} <span class="note">± ${(100 * b.se).toFixed(1)}</span></td><td class="num">${Math.round(100 * b.hit)}%</td>` : '<td class="num">0</td><td class="num na">—</td><td class="num na">—</td>';
+  let h = '<tr><th>Entry at</th><th class="num">trades</th><th class="num">profit per contract (cents)</th><th class="num">resolved YES</th></tr>';
+  DT.forEach(([k, lab], i) => { h += `<tr${i === 2 || i === 4 ? ' class="mid"' : ''}><td>first alarm, ${lab}</td>` + cell(M.detectors[k].backtest[a]) + '</tr>'; });
+  h += `<tr class="mid"><td>a random hour</td><td class="num">${rd.n}</td><td class="num">+${(100 * rd.mean).toFixed(1)} <span class="note">± ${(100 * rd.se).toFixed(1)}</span></td><td class="num">—</td></tr>`;
+  $('btTab').innerHTML = h;
+  $('btCap').innerHTML = `Buy one YES contract (pays $1 if YES) at the first alarm in each held-out market while the price is below 0.8, hold to resolution, pay 1 cent. Thresholds are those that keep PFA at or below ${a} in Table __TDET__. Mean profit with standard error; "resolved YES" is the share of trades that won. The price level never alarms below 0.8 at the stricter thresholds, so it does not trade there. Trades in ladder markets of the same event are not independent, so the true errors are larger.`;
+}
+
+function updAll() { render(chRc); updRel(); render(chPm); updEv(); updBt(); }
+updAll();
+})();
+</script>
