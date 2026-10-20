@@ -1,0 +1,161 @@
+<title>Where DeepQCD Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+:root { --rule: #555555; --flow: #0072B2; }
+td.bad { color: var(--no); font-weight: 600; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <p>Two problems where DeepQCD clearly beats the window-limited CUSUM and the rules practitioners use, both with exact labels by the thousand. One where it only ties. Each uses the original network and training from <span class="mono">original_qcd.py</span> and the paper's transient test (an alarm before the change is a false alarm; a first alarm during it is a detection). Code: <a href="__REPO__/blob/__BRANCH__/aml_qcd.py">aml_qcd.py</a>, <a href="__REPO__/blob/__BRANCH__/fetch_amlsim.sh">fetch_amlsim.sh</a>, <a href="__REPO__/blob/__BRANCH__/polymarket_meta.py">polymarket_meta.py</a>; notes: <a href="__REPO__/blob/__BRANCH__/notes/aml.md">aml.md</a>, <a href="__REPO__/blob/__BRANCH__/notes/polymarket-flow.md">polymarket-flow.md</a>.</p>
+  <div class="tablewrap"><table id="sumTab"></table></div>
+  <ul class="tight">
+    <li><b>Money laundering (IBM AMLSim): works.</b> It flags 82% of laundering accounts during their scheme (80–87% over three seeds), mostly on the first day. The best rule set, which includes the dormant-account rule, flags 70%, and the CUSUM 12%. Among accounts that were active before their scheme, where dormancy says nothing, DeepQCD flags 50% and no rule or CUSUM more than 12%.</li>
+    <li><b>Churn in prediction markets (Polymarket, labelled by wallet): works.</b> When one trader starts churning a market (buying and selling back and forth, a wash trader or a scalper), DeepQCD detects 42% of sessions vs 30% for the CUSUM. At PFA 0.01 the gap holds: 35% vs 21%. A market maker should keep quoting through churn, since the churner pays the spread on every leg.</li>
+    <li><b>Metaorders in prediction markets: ties.</b> When one trader works a large order in pieces, DeepQCD detects slightly more (38% vs 33%), but later. The CUSUM catches the price-moving ones in their first minutes and saves a market maker more (0.17 vs 0.04 cents per metaorder).</li>
+    <li><b>The pattern.</b> DeepQCD wins when the change shows as a combination of cues judged against the account's or market's own history: a dormant account with a new counterparty; busy trading that stays balanced and repetitive. It ties when one statistic carries the signal (signed flow for a metaorder). Both wins rest on thousands of exact labels: a simulator's for AML, on-chain wallets for Polymarket.</li>
+  </ul>
+</section>
+
+<div class="part">1 · Money laundering</div>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Laundering schemes in a simulated bank</h2>
+  <p><a href="https://github.com/IBM/AMLSim">IBM AMLSim</a> simulates a bank's transfers between about 10,000 accounts for 720 days, with laundering schemes of eight typologies: fan-in, fan-out, cycle, bipartite, stack, random, scatter-gather and gather-scatter. We built it from source and simulated six banks with different seeds. Banks 1–4 train the detectors and banks 5–6 test them. Each bank has 300 schemes of 5–10 accounts lasting 5–20 days, with amounts drawn from the same $100–$1,000 range as normal transfers, so size does not give laundering away. Every laundering transfer is labelled, which gives about 1,600 laundering accounts per bank.</p>
+  <p>Each account is a daily stream of nine features a bank's monitoring would compute: transfers in and out, amounts in and out, new counterparties in and out, distinct counterparties over 7 days, money passing through (in and out within 3 days), and contact with a hub (the largest 7-day counterparty count among today's counterparties). An account's change runs from its first laundering transfer until 3 days after its last. A test stream is the 120 days before the change and then the change, for every laundering account in banks 5 and 6 with enough history: __AEV__ accounts (__AMAIN__ hubs of their scheme, __AMEM__ members). The no-change streams are 4,000 windows of accounts never involved. Alarms count from day 14.</p>
+  <ul class="tight">
+    <li><b>DeepQCD</b>: the paper's network and training, label 1 during laundering, about 24,000 training windows; three seeds.</li>
+    <li><b>Window-limited CUSUM</b>: <span class="mono">window_dec_stat</span> over 7 days on the Gaussian log-likelihood direction of all nine features.</li>
+    <li><b>Rules</b>, the scenarios banks run: money passing through, many counterparties, transaction velocity, contact with a hub, new counterparties, a dormant account reactivated, and dormant plus new counterparty. "Rules combined" runs all of them at once, each scaled by its 99th percentile on normal days.</li>
+  </ul>
+  <p class="cap">Probability of flagging a laundering account during its scheme at the threshold that keeps PFA (an alarm on a normal account-window, or on a laundering account before its scheme, over 106 days) at or below α. DeepQCD: mean of three seeds, each in brackets. The last columns split the accounts at α = 0.05.</p>
+  <div class="tablewrap"><table id="amlTab"></table></div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD (3 seeds)</span><span><i style="background:var(--cusum)"></i>WL-CUSUM</span><span><i style="background:var(--rule)"></i>rules combined</span><span><i class="dash" style="color:var(--rule)"></i>new counterparties</span></div>
+      <canvas class="chart tall" id="amlC" role="img" aria-label="PD against PFA for laundering detection"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read">PD against PFA on banks 5 and 6, one point per threshold. The flat steps come from the many normal windows with no transfers at all, which all share the same statistic. DeepQCD is highest everywhere between PFA 0.3 and 0.01. At 0.01 the combined rules, carried by the dormant-account rule, are level with it.</p></div>
+  </div>
+  <p><b>What DeepQCD keys on.</b> In AMLSim, 67% of the accounts drawn into a scheme made no transfer in the 120 days before it (39% of normal windows), and 93% deal with a new counterparty on their first laundering day (14.5% of normal active days). The network learned the combination: a quiet account that suddenly deals with someone new. The dormant-account rule covers part of that, which is why it reaches 0.70 while every other single rule stays below 0.08. For accounts that were active before their scheme, dormancy does not apply, and the cue is a new counterparty for an account that had typically dealt with a single partner in the previous 120 days: 76–79% of their first laundering days, against 14% of normal active days. A fixed new-counterparty threshold cannot tell those apart from normal accounts meeting someone new; the network judges the newcomer against the account's own history.</p>
+  <p><b>Limits.</b> This is a simulator. AMLSim's normal accounts transact with fixed partners and many are dormant, so "new counterparty" and "reactivation" are stronger cues here than in a real bank. The banks are enriched: about 30% of active accounts launder, so at a realistic one in a thousand, PFA 0.01 with PD 0.7 would mean about 14 false alerts per laundering account found. The rare-event recipe (train enriched, calibrate, shift the prior) is what sets thresholds there. The next test is IBM's larger <a href="https://arxiv.org/abs/2306.16424">AMLworld</a> data (Altman et al., 2023), whose normal behaviour is richer. It is on Kaggle, which needs an API key we do not have here.</p>
+</section>
+
+<div class="part">2 · Prediction markets</div>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Order flow labelled by wallet</h2>
+  <p>A market maker needs to know who is trading against it, and anonymous exchanges hide that, so detectors of this kind are usually studied with proprietary broker data. Polymarket settles on chain: every trade carries its wallet. So the episodes a market maker cares about can be labelled exactly from public data, while the detectors see only what an anonymous venue would show (side, size, time, price). A detector trained this way could then be run on Kalshi or futures, where such labels do not exist. We downloaded every trade of __PMK__ random two-outcome markets with $1M–$30M volume that closed in 2025–26: __PTR__ million trades. Two kinds of episode, both defined per wallet (one wallet, trades at most 10 minutes apart, lasting at least a minute):</p>
+  <ul class="tight">
+    <li><b>Metaorder</b>: at least 5 trades and $2,000, all in one direction. It moves the price against a market maker: 2.6 cents on average over its life (standard error 0.2), 1.0 cent of it in the second half, with no reliable reversal afterwards. A market maker that steps back on time avoids selling into the rest.</li>
+    <li><b>Churn</b>: at least 6 trades, $2,000 gross, 4 changes of side, and net under 20% of gross: one trader buying and selling back and forth (a wash trader or a scalper). For a market maker this is good flow, paid in spread on every leg; mistaking it for a metaorder and stepping back loses that.</li>
+  </ul>
+  <p>Detectors see one-minute features: number of trades, signed flow, gross volume, largest trade, one-sidedness, the share of same-side trades of similar size, regularity of the gaps between trades, price change, and trades over 10 minutes. A test stream is 180 quiet minutes (no episode of that kind) followed by the episode; the no-change streams are 3,576 random quiet 4-hour windows. Markets that closed first train (447), the rest test (298). DeepQCD has three seeds; the CUSUM uses <span class="mono">window_dec_stat</span> over 10 minutes; the rules are the absolute signed flow over 5 minutes and the number of trades over 10 minutes.</p>
+  <div class="controls">
+    <div class="ctl"><span class="lab" id="tgL">episode</span><span class="seg" role="group" aria-labelledby="tgL" id="tgS"><button aria-pressed="true" data-v="churn">churn</button><button aria-pressed="false" data-v="metaorder">metaorder</button></span></div>
+  </div>
+  <p class="cap" id="pmCap"></p>
+  <div class="tablewrap"><table id="pmTab"></table></div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD (3 seeds)</span><span><i style="background:var(--cusum)"></i>WL-CUSUM</span><span><i style="background:var(--flow)"></i>signed flow, 5 min</span><span><i class="dash" style="color:var(--rule)"></i>trades, 10 min</span></div>
+      <canvas class="chart tall" id="pmC" role="img" aria-label="PD against PFA for the selected episode"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read" id="pmRead"></p></div>
+  </div>
+  <p class="cap" id="valCap"></p>
+  <div class="tablewrap"><table id="valTab"></table></div>
+  <p id="valRead"></p>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Where DeepQCD works</h2>
+  <ul class="tight">
+    <li><b>Many exact labels.</b> Both wins have thousands: AMLSim labels every laundering transfer, and Polymarket's wallets label every episode. The losses in earlier work (real sensor data, the Polymarket news test) had tens of events.</li>
+    <li><b>A signature made of several cues, judged in context.</b> A new counterparty is suspicious for an account that had one partner and was quiet, not for a busy one. A burst of trades is churn if it stays balanced and repetitive. A linear statistic (the CUSUM) or one threshold per rule cannot express "this, given that"; the network learns it.</li>
+    <li><b>Not when one statistic carries the signal.</b> A metaorder is, above all, one-sided flow. The CUSUM's window over signed flow catches the strong ones within two minutes, and DeepQCD's extra detections are the slow, small ones that matter less.</li>
+    <li><b>Use.</b> For a market maker, run both: step back when a metaorder starts (CUSUM), keep quoting when a churn session starts (DeepQCD). For a bank, DeepQCD replaces several hand-written scenarios with one learned score, but needs labelled cases and a calibrated threshold.</li>
+  </ul>
+</section>
+
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+const ALL = JSON.parse(document.getElementById('data').textContent);
+const A = ALL.aml, P = ALL.pm;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+__HELPERS__
+const C = { deep: css('--deep'), cusum: css('--cusum'), rule: css('--rule'), flow: css('--flow') };
+const f2 = v => v == null ? '—' : v.toFixed(2);
+const seeds = d => d.pd_at_seeds ? ` <span class="note">(${d.pd_at_seeds['0.05'].map(v => v.toFixed(2)).join(', ')})</span>` : '';
+
+// ---- summary table
+(() => {
+  const D = A.detectors, ch = P.churn.detectors, me = P.metaorder.detectors;
+  const bestRule = Math.max(...Object.keys(D).filter(k => k.startsWith('Rule')).map(k => D[k].pd_at['0.05']));
+  const rows = [
+    ['Laundering accounts (AMLSim)', D.DeepQCD.pd_at['0.05'], D['WL-CUSUM'].pd_at['0.05'], `${f2(D['Rules combined'].pd_at['0.05'])} (rules combined)`, 'works'],
+    ['Churn sessions (Polymarket)', ch.DeepQCD.pd_at['0.05'], ch['WL-CUSUM'].pd_at['0.05'], `${f2(Math.max(ch['Trades, last 10 min'].pd_at['0.05'], ch['Flow, last 5 min'].pd_at['0.05']))} (trades, 10 min)`, 'works'],
+    ['Metaorders (Polymarket)', me.DeepQCD.pd_at['0.05'], me['WL-CUSUM'].pd_at['0.05'], `${f2(Math.max(me['Trades, last 10 min'].pd_at['0.05'], me['Flow, last 5 min'].pd_at['0.05']))} (trades, 10 min)`, 'ties: CUSUM is earlier'],
+  ];
+  let h = '<tr><th>Problem</th><th class="num">DeepQCD</th><th class="num">WL-CUSUM</th><th class="num">best rule</th><th>Verdict</th></tr>';
+  rows.forEach(r => { h += `<tr><td>${r[0]}</td><td class="num win">${f2(r[1])}</td><td class="num">${f2(r[2])}</td><td class="num">${r[3]}</td><td>${r[4]}</td></tr>`; });
+  $('sumTab').innerHTML = '<caption style="display:none">PD at PFA 0.05</caption>' + h;
+})();
+
+// ---- AML table
+(() => {
+  const D = A.detectors;
+  const order = ['DeepQCD', 'WL-CUSUM', 'Rules combined', 'Rule: dormant + new counterparty', 'Rule: dormant account reactivated', 'Rule: new counterparties (3 days)', 'Rule: counterparties (7 days)', 'Rule: velocity (7 days)', 'Rule: pass-through (3 days)', 'Rule: hub contact'];
+  let h = '<tr><th>Detector</th><th class="num">PFA 0.01</th><th class="num">0.05</th><th class="num">0.1</th><th class="num">hubs</th><th class="num">members</th><th class="num">active before</th><th class="num">delay</th></tr>';
+  order.forEach((k, i) => {
+    const d = D[k]; const lab = k.replace('Rule: ', 'rule: ');
+    h += `<tr${i === 2 || i === 3 ? ' class="mid"' : ''}><td>${lab}</td><td class="num">${f2(d.pd_at['0.01'])}</td><td class="num${i === 0 ? ' win' : ''}">${f2(d.pd_at['0.05'])}${i === 0 ? seeds(d) : ''}</td><td class="num">${f2(d.pd_at['0.1'])}</td><td class="num">${f2(d.by_role['0.05'].main)}</td><td class="num">${f2(d.by_role['0.05'].member)}</td><td class="num">${f2(d.active_before['0.05'])}</td><td class="num">${d.delay_at['0.05'] == null ? '—' : d.delay_at['0.05'] + ' d'}</td></tr>`;
+  });
+  $('amlTab').innerHTML = h;
+})();
+function curveChart(id, get, lines) {
+  return chart($(id), (g, W, H) => {
+    const xmin = 3e-3;
+    const P2 = frame(g, W, H, { x0: 1, x1: xmin, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: 'PD', ml: 40 });
+    lines().forEach(([c, col, w, dash]) => line(g, P2, c.pfa.map(v => Math.max(v, xmin)), c.pd, col, w, dash));
+    P2.restore();
+  });
+}
+const amlLines = () => { const D = A.detectors; return [[D['Rule: new counterparties (3 days)'], C.rule, 1.6, [6, 4]], [D['Rules combined'], C.rule, 2, null], [D['WL-CUSUM'], C.cusum, 2, null], [D['DeepQCD s1'], C.deep, 1, null], [D['DeepQCD s2'], C.deep, 1, null], [D['DeepQCD s0'], C.deep, 2.2, null]]; };
+const chA = curveChart('amlC', null, amlLines);
+
+// ---- Polymarket
+const tgV = seg('tgS', updPm);
+const pmLines = () => { const D = P[tgV()].detectors; return [[D['Trades, last 10 min'], C.rule, 1.6, [6, 4]], [D['Flow, last 5 min'], C.flow, 1.8, null], [D['WL-CUSUM'], C.cusum, 2, null], [D['DeepQCD s1'], C.deep, 1, null], [D['DeepQCD s2'], C.deep, 1, null], [D['DeepQCD s0'], C.deep, 2.2, null]]; };
+const chP = curveChart('pmC', null, pmLines);
+const NAMES = [['DeepQCD', 'DeepQCD'], ['WL-CUSUM', 'WL-CUSUM'], ['Flow, last 5 min', 'signed flow, 5 min'], ['Trades, last 10 min', 'trades, 10 min']];
+function updPm() {
+  const t = tgV(), R = P[t], D = R.detectors;
+  let h = '<tr><th>Detector</th><th class="num">PFA 0.01</th><th class="num">0.05</th><th class="num">0.1</th>' + Object.keys(D.DeepQCD.by_size['0.05']).map(k => `<th class="num">${k}</th>`).join('') + '<th class="num">delay</th></tr>';
+  NAMES.forEach(([k, lab], i) => {
+    const d = D[k];
+    h += `<tr><td>${lab}</td><td class="num">${f2(d.pd_at['0.01'])}</td><td class="num${i === 0 && t === 'churn' ? ' win' : ''}">${f2(d.pd_at['0.05'])}${i === 0 ? seeds(d) : ''}</td><td class="num">${f2(d.pd_at['0.1'])}</td>` + Object.keys(D.DeepQCD.by_size['0.05']).map(s => `<td class="num">${f2(d.by_size['0.05'][s])}</td>`).join('') + `<td class="num">${d.delay_at['0.05'] == null ? '—' : d.delay_at['0.05'] + ' min'}</td></tr>`;
+  });
+  $('pmTab').innerHTML = h;
+  $('pmCap').innerHTML = `${t === 'churn' ? 'Churn' : 'Metaorder'} detection on the held-out markets: ${R.n_test_events} ${t === 'churn' ? 'churn sessions' : 'metaorders'} that start after 3 quiet hours, and ${R.n_test_no.toLocaleString('en-US')} quiet windows. PD at PFA 0.01, 0.05 and 0.1 (DeepQCD: mean of three seeds, each at 0.05 in brackets), then PD at 0.05 by the episode's dollar size, and the median minutes from its start to the alarm. Between PFA 0.05 and 0.1 the PD often does not move: the next threshold down adds a block of windows with identical statistics.`;
+  $('pmRead').innerHTML = t === 'churn' ? 'Churn: below PFA 0.2, DeepQCD lies above the others, by about 0.1. The CUSUM and the trade count see a burst of activity but cannot tell a balanced, repetitive burst from any other; for sessions of $20,000 or more DeepQCD detects about 0.6 and the CUSUM 0.31.' : 'Metaorders: DeepQCD and the CUSUM are close; DeepQCD is ahead at PFA 0.05 and 0.1 by 0.04–0.08. The signed-flow rule catches the large metaorders ($20,000 or more) as well as either, but few small ones.';
+  // value table
+  const cols = t === 'churn' ? [['remaining_share', 'share of the session still to come at the alarm'], ['caught_share', 'share of all churn time handled correctly']] : [['remaining_share', 'share of the metaorder still to come at the alarm'], ['remaining_cents', 'price move still to come (cents)'], ['per_event_cents', 'cents saved per metaorder']];
+  let v = '<tr><th>Detector</th><th class="num">detections</th>' + cols.map(c => `<th class="num w">${c[1]}</th>`).join('') + '</tr>';
+  NAMES.forEach(([k, lab]) => { const im = (k === 'DeepQCD' ? D['DeepQCD s0'] : D[k]).impact_at['0.05']; v += `<tr><td>${lab}${k === 'DeepQCD' ? ' (seed 0)' : ''}</td><td class="num">${im.n}</td>` + cols.map(c => `<td class="num">${im[c[0]] == null ? '—' : im[c[0]].toFixed(2)}</td>`).join('') + '</tr>'; });
+  $('valTab').innerHTML = v;
+  $('valCap').innerHTML = t === 'churn' ? 'What a detection is worth to a market maker, at PFA 0.05. A market maker that recognizes churn keeps quoting and earns the spread on the rest of the session. "Share handled correctly" adds up the remaining shares of all sessions, with misses as 0.' : 'What a detection is worth to a market maker, at PFA 0.05: the price move still to come in the metaorder\'s direction, from the alarm to 5 minutes after the metaorder ends, which a market maker that steps back at the alarm avoids. "Cents saved per metaorder" averages it over all metaorders, with misses as 0.';
+  $('valRead').innerHTML = t === 'churn' ? 'DeepQCD alarms with about 70% of the session still to come and catches more sessions, so it handles 0.26–0.32 of all churn time correctly against 0.22 for the CUSUM and 0.19 for the trade count.' : 'The CUSUM saves the most: 0.17 cents per metaorder, against about 0.04 for DeepQCD and 0.13 for the trade count. Its detections come about two minutes in, while the price is still moving; DeepQCD\'s extra detections are later and slower metaorders, with little move left. A metaorder\'s footprint is mostly one statistic, signed flow, and that is the CUSUM\'s home ground.';
+  render(chP);
+}
+updPm(); render(chA);
+})();
+</script>
