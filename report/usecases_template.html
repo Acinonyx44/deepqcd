@@ -1,0 +1,196 @@
+<title>Six Finance Use Cases</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+:root { --rule: #555555; --lr: #0072B2; }
+td.v-win { color: var(--yes); font-weight: 600; } td.v-tie { color: var(--muted); font-weight: 600; } td.v-no { color: var(--no); font-weight: 600; }
+.eli { border-left: 2px solid #111; padding: 2px 0 2px 14px; font-style: italic; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <p class="eli">We built six alarms for six money jobs, each trained on thousands of real or realistic examples, and raced each one against the simple alarms people already use. Our alarm (DeepQCD) clearly won three races: spotting a price run in crypto, a stolen card, and laundering at a strict false-alarm level. It tied in two (short squeezes and loan defaults). In the sixth, a prediction-market maker's profit and loss, the alarms helped, but DeepQCD added little over a simple "the market is busy" rule.</p>
+  <p class="cap">Each use case, its held-out test, and the probability of catching the event at the threshold that keeps the false-alarm probability (PFA) at 0.05, or 0.01 where noted. DeepQCD: the paper's network and training, mean of three seeds. "Best other": the best of a per-step logistic model (learned, but without memory), the window-limited CUSUM, and the rules practitioners use.</p>
+  <div class="tablewrap"><table id="board"></table></div>
+  <p>Code: <a href="__REPO__/blob/__BRANCH__/usecases_common.py">usecases_common.py</a> (shared training and metrics), <a href="__REPO__/blob/__BRANCH__/usecase_toxic.py">usecase_toxic.py</a>, <a href="__REPO__/blob/__BRANCH__/usecase_amlworld.py">usecase_amlworld.py</a>, <a href="__REPO__/blob/__BRANCH__/usecase_mm_pnl.py">usecase_mm_pnl.py</a>, <a href="__REPO__/blob/__BRANCH__/usecase_squeeze.py">usecase_squeeze.py</a>, <a href="__REPO__/blob/__BRANCH__/usecase_credit.py">usecase_credit.py</a>, <a href="__REPO__/blob/__BRANCH__/usecase_fraud.py">usecase_fraud.py</a>; data: <a href="__REPO__/blob/__BRANCH__/fetch_usecases.sh">fetch_usecases.sh</a>, <a href="__REPO__/blob/__BRANCH__/squeeze_fetch.py">squeeze_fetch.py</a>; notes: <a href="__REPO__/blob/__BRANCH__/notes/usecases.md">usecases.md</a>.</p>
+</section>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>How every race was run</h2>
+  <ul class="tight">
+    <li><b>One stream per thing being watched.</b> A market, an account, a card or a stock, with one step per second, transaction or day. Each step carries features the business already computes.</li>
+    <li><b>Labels in hindsight, by the thousand.</b> The event is marked from what happened later: a price run, laundering transfers, fraudulent transactions, a 50% rally, a default. It runs from τ₁ to τ₂, the paper's transient change.</li>
+    <li><b>Native test streams, split by time.</b> Each test stream is the real history before the event, then the event itself; quiet windows serve as no-event streams. Training data comes from before the test period, from other accounts, or (for credit) from other clients.</li>
+    <li><b>Scoring.</b> A false alarm (PFA) is an alarm before the event. A detection (PD) is a first alarm during it. Every detector gets the threshold that maximizes PD with PFA ≤ α (the paper's Eq. 11), at α = 0.01, 0.05 and 0.1.</li>
+    <li><b>Competitors.</b>
+      <ul class="tight">
+        <li>DeepQCD: LSTM(16) → Dense(10) → Dense(1), cross-entropy, 20 epochs, three seeds.</li>
+        <li>A logistic model on the current step's features: the same information, learned, but with no memory.</li>
+        <li>The window-limited CUSUM (<span class="mono">window_dec_stat</span>) on the Gaussian log-likelihood direction.</li>
+        <li>The rules each industry uses.</li>
+      </ul>
+    </li>
+  </ul>
+  <div class="controls">
+    <div class="ctl"><label for="ucS">curves for</label><select id="ucS"></select></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="legend"><span><i style="background:var(--deep)"></i>DeepQCD (3 seeds)</span><span><i style="background:var(--lr)"></i>logistic, this step only</span><span><i style="background:var(--cusum)"></i>WL-CUSUM</span><span><i class="dash" style="color:var(--rule)"></i>best rule</span></div>
+      <canvas class="chart tall" id="cvC" role="img" aria-label="PD against PFA for the selected use case"></canvas>
+    </div>
+    <div style="justify-content:center"><p class="read" id="cvRead"></p></div>
+  </div>
+</section>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Market makers: crypto toxic-flow alarm</h2>
+  <p class="eli">A shopkeeper selling ETH on both sides loses when the price suddenly runs. Whoever trades with them just before the run knew something. The alarm should ring early in the run so the shopkeeper can step back.</p>
+  <p><b>Data.</b> Binance ETHUSDT perpetual futures, every aggregated trade (public), from 2026-07-01 to 2026-10-20. Training uses 92 days and testing the last 20. Each second carries ten features: trades, signed and gross notional, largest trade, price levels traded, return, imbalance over 5 seconds, trades over 10 seconds, volatility over 30 seconds, and return over 5 seconds. <b>Events:</b> fast runs, meaning swings of at least 15 bps completed within 60 seconds, found by a zigzag in hindsight. There are about 80 a day. The test has __TXE__ runs that start after 5 quiet minutes, plus 6,000 quiet windows.</p>
+  <div class="tablewrap"><table id="t_toxic"></table></div>
+  <div class="tablewrap"><table id="v_toxic"></table></div>
+  <p id="r_toxic"></p>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Banks: laundering in IBM AMLworld</h2>
+  <p class="eli">Same job as the fake bank before, but a much more realistic one: many payment types, 15 currencies, salaries, bills and investments.</p>
+  <p><b>Data.</b> IBM AMLworld HI-Small (Altman et al., NeurIPS 2023): 5.1 million transfers between 515,000 accounts over 18 days, with every laundering transfer labelled. Each account is a stream with one step per transaction, carrying fifteen features: direction, USD amount, payment format, cross-currency, cross-bank, self-transfer, new counterparty, time since the last transaction, and the counterparty's number of counterparties. <b>Events:</b> from an account's first laundering transfer to one transfer after its last. Schemes starting before 6 September train; the __AWE__ laundering accounts after it test, against 8,000 normal windows of 15 transactions. We also tried <b>Elliptic++</b> (real Bitcoin wallets labelled illicit) and dropped it as not a change-detection problem: wallets live a median of one time step, labels never change, and only 85 illicit wallets have three steps or more.</p>
+  <div class="tablewrap"><table id="t_amlworld"></table></div>
+  <p id="r_amlworld"></p>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Market makers on prediction markets: does an alarm make money?</h2>
+  <p class="eli">Play shopkeeper on real Polymarket history. Take the other side of every trade, and see whether stepping back when an alarm rings makes or saves money.</p>
+  <p><b>Setup.</b> The same 745 markets as the wallet-labelled work, replayed over the 298 held-out ones. We fill the same share of every taker trade while we quote. A fill earns its markout: the price 5 minutes later against the fill price, for our side. The metaorder alarm is the window-limited CUSUM, which saved the most in the earlier test; the churn alarm is DeepQCD. Thresholds are set on training markets so that each alarm is on in 2% of the quiet minutes there, and every decision uses only data up to the previous minute.</p>
+  <div class="tablewrap"><table id="t_mm"></table></div>
+  <p id="r_mm"></p>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Hedge funds: short-squeeze early warning</h2>
+  <p class="eli">Warn short sellers when a heavily shorted stock starts to rip, before most of the rally is over.</p>
+  <p><b>Data.</b> Yahoo daily prices and FINRA daily short-sale volume, 2021–2026, for __SQS__ US stocks with a median short-volume share of at least 40%. <b>Events:</b> rallies of at least 50% within 10 days on three times normal volume. Rallies before 2025 train; the __SQE__ after it test, against 8,000 quiet 60-day windows. Each day carries ten features: return, volume against normal, short-volume share and its jump, range, gap, 5- and 20-day returns, volatility, and distance from the 52-week high.</p>
+  <div class="tablewrap"><table id="t_squeeze"></table></div>
+  <div class="tablewrap"><table id="v_squeeze"></table></div>
+  <p id="r_squeeze"></p>
+</section>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Banks: credit-card default early warning</h2>
+  <p class="eli">Spot, month by month, the card holders who will default next month.</p>
+  <p><b>Data.</b> UCI "Default of credit card clients" (Yeh &amp; Lien 2009): 30,000 card holders, six months each, and whether they defaulted in month seven (22% did). Each month carries the repayment status, utilization, bill, payment, payment against the bill, bill change, limit and age. 70% of clients train and the other __CRT__ test. An alarm in any month flags the client. Freddie Mac and Fannie Mae loan histories would be the stronger test, but they need a registration we cannot do from here.</p>
+  <div class="tablewrap"><table id="t_credit"></table></div>
+  <p id="r_credit"></p>
+</section>
+
+<section class="exp" id="s7">
+  <h2><span class="num">7</span>Banks: card fraud and account takeover</h2>
+  <p class="eli">Spot the moment someone else starts using your card, so the bank can block it after one bad charge, not five.</p>
+  <p><b>Data.</b> IBM TabFormer (Padhi et al., ICASSP 2021): 24.4 million synthetic card transactions of 6,139 cards, 1991–2020, with 29,757 frauds in 4,833 bursts. Each card is a stream with one step per transaction, carrying fifteen features: amount, refund, online, chip, new merchant, city, state or category, foreign, errors, time since the last transaction, hour of day, amount against the card's history, and transactions in the last 24 hours. Bursts before 2016 train; the __FRE__ bursts from 2016 on test, against 8,000 clean windows of 30 transactions.</p>
+  <div class="tablewrap"><table id="t_fraud"></table></div>
+  <p id="r_fraud"></p>
+</section>
+
+<section class="exp" id="s8">
+  <h2><span class="num">8</span>What this says</h2>
+  <ul class="tight">
+    <li><b>Where DeepQCD earns its keep.</b> Fast changes that show as several cues at once, where thousands of labelled events exist and a strict false-alarm rate is needed. Here that meant crypto runs, stolen cards, and laundering at PFA 0.01. These are exactly the alarms market makers and card issuers run all day.</li>
+    <li><b>The memory is what pays.</b> The logistic model sees the same features one step at a time and loses those races by 0.1–0.3 in PD. So the gain is not better features; it is reading the sequence.</li>
+    <li><b>Where it doesn't.</b> Slow, price-led events (squeezes) and short monthly histories (credit) are as well served by the CUSUM or one rule. In the prediction-market P&L replay, the alarms help, but a plain "busy" rule does nearly as much.</li>
+    <li><b>Caveats.</b> TabFormer and AMLworld are synthetic, if realistic. The crypto run labels come from prices in hindsight. The P&L replay ignores queue position and Polymarket's liquidity rewards. Thresholds are set on the test streams, as in the paper; in production they would be set on held-out data, with the rare-event recipe from the earlier page.</li>
+  </ul>
+</section>
+
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+const U = JSON.parse(document.getElementById('data').textContent);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+__HELPERS__
+const C = { deep: css('--deep'), lr: css('--lr'), cusum: css('--cusum'), rule: css('--rule') };
+const f2 = v => v == null || !isFinite(v) ? '—' : v.toFixed(2);
+const NAMES = { toxic: 'Crypto toxic flow (Binance)', amlworld: 'Laundering (IBM AMLworld)', squeeze: 'Short squeezes (US stocks)', credit: 'Card default (UCI)', fraud: 'Card fraud (IBM TabFormer)' };
+const bestRule = D => Object.keys(D).filter(k => k.startsWith('Rule')).sort((a, b) => D[b].pd_at['0.05'] - D[a].pd_at['0.05'])[0];
+const bestOther = (D, a) => ['Logistic (this step only)', 'WL-CUSUM', ...Object.keys(D).filter(k => k.startsWith('Rule'))].reduce((m, k) => D[k].pd_at[a] > D[m].pd_at[a] ? k : m, 'WL-CUSUM');
+
+// ---- scoreboard
+(() => {
+  const rows = [
+    ['toxic', 'market makers', '0.05', 'win'], ['fraud', 'card issuers', '0.01', 'win'], ['amlworld', 'banks (AML)', '0.01', 'win at 1%, tie at 5%'],
+    ['squeeze', 'hedge funds', '0.05', 'tie'], ['credit', 'banks (credit)', '0.05', 'tie'],
+  ];
+  let h = '<tr><th>Use case</th><th>For</th><th class="num">test events</th><th class="num">PFA</th><th class="num">DeepQCD</th><th>best other</th><th>Verdict</th></tr>';
+  rows.forEach(([k, who, a, v]) => {
+    const R = U[k], D = R.detectors, bo = bestOther(D, a);
+    const cls = v.startsWith('win') ? 'v-win' : v === 'tie' ? 'v-tie' : 'v-no';
+    h += `<tr><td>${NAMES[k]}</td><td>${who}</td><td class="num">${R.n_test_events.toLocaleString('en-US')}</td><td class="num">${a}</td><td class="num win">${f2(D.DeepQCD.pd_at[a])}</td><td class="w">${f2(D[bo].pd_at[a])} <span class="note">${bo.replace('Rule: ', '')}</span></td><td class="w ${cls}">${v}</td></tr>`;
+  });
+  const M = U.mm_pnl.strategies;
+  h += `<tr><td>Polymarket market making (P&amp;L)</td><td>market makers</td><td class="num">${U.mm_pnl.markets_test} markets</td><td class="num">—</td><td class="num">${f2(M['step back on either alarm'].pnl_per_100usd_of_all_volume)}¢</td><td class="w">${f2(M['step back when busy'].pnl_per_100usd_of_all_volume)}¢ <span class="note">busy rule; always quoting ${f2(M['always quote'].pnl_per_100usd_of_all_volume)}¢</span></td><td class="w v-tie">alarms help; DeepQCD adds little</td></tr>`;
+  $('board').innerHTML = h;
+})();
+
+// ---- per use case detection tables
+function detTable(id, k, groupsLabel) {
+  const D = U[k].detectors;
+  const order = ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', ...Object.keys(D).filter(x => x.startsWith('Rule'))];
+  const g = D.DeepQCD.groups && D.DeepQCD.groups['0.05'] ? Object.keys(D.DeepQCD.groups['0.05']) : [];
+  let h = '<tr><th>Detector</th><th class="num">PFA 0.01</th><th class="num">0.05</th><th class="num">0.1</th>' + g.map(x => `<th class="num">${x}</th>`).join('') + '</tr>';
+  order.forEach((n, i) => {
+    const d = D[n]; if (!d) return;
+    const s = d.pd_at_seeds ? ` <span class="note">(${d.pd_at_seeds['0.05'].map(v => v.toFixed(2)).join(', ')})</span>` : '';
+    h += `<tr${i === 3 ? ' class="mid"' : ''}><td>${n.replace('Rule: ', 'rule: ')}</td>` + ['0.01', '0.05', '0.1'].map(a => `<td class="num${i === 0 ? ' win' : ''}">${f2(d.pd_at[a])}${a === '0.05' ? s : ''}</td>`).join('') + g.map(x => `<td class="num">${f2((d.groups['0.05'] || {})[x])}</td>`).join('') + '</tr>';
+  });
+  $(id).innerHTML = (groupsLabel ? `<caption class="cap" style="caption-side:top;text-align:left;padding-bottom:6px">${groupsLabel}</caption>` : '') + h;
+}
+detTable('t_toxic', 'toxic', 'PD at PFA 0.01, 0.05, 0.1 (DeepQCD: mean of three seeds, each at 0.05 in brackets), then PD at 0.05 by the size of the run.');
+detTable('t_amlworld', 'amlworld', 'PD at PFA 0.01, 0.05, 0.1, then PD at 0.05 by the format of the first laundering transfer and by the number of laundering transfers.');
+detTable('t_squeeze', 'squeeze', 'PD at PFA 0.01, 0.05, 0.1.');
+detTable('t_credit', 'credit', 'PD at PFA 0.01, 0.05, 0.1 (PFA: share of non-defaulters flagged; PD: share of defaulters flagged by month six).');
+detTable('t_fraud', 'fraud', 'PD at PFA 0.01, 0.05, 0.1, then PD at 0.05 by whether the burst starts with an online transaction.');
+
+// value tables
+(() => {
+  const D = U.toxic.detectors, rows = ['DeepQCD s0', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: price move, 5 s', 'Rule: trades, 10 s', 'Rule: signed flow, 5 s'];
+  let h = '<caption class="cap" style="caption-side:top;text-align:left;padding-bottom:6px">What an alarm is worth to the market maker, at PFA 0.05: the run still to come when it rings (bps), which pulling quotes on that side avoids, and the same averaged over all runs (misses count as 0).</caption><tr><th>Detector</th><th class="num">detections</th><th class="num">median delay</th><th class="num">run left at alarm</th><th class="num">avoided per run</th></tr>';
+  rows.forEach(n => { const v = D[n].value['0.05']; h += `<tr><td>${n.replace('Rule: ', 'rule: ')}${n === 'DeepQCD s0' ? '' : ''}</td><td class="num">${v.n}</td><td class="num">${v.delay_s == null ? '—' : v.delay_s + ' s'}</td><td class="num">${f2(v.remaining_bps)} of ${f2(v.run_bps)} bps</td><td class="num${n === 'DeepQCD s0' ? ' win' : ''}">${f2(v.avoided_bps_per_run)} bps</td></tr>`; });
+  $('v_toxic').innerHTML = h;
+  const S = U.squeeze.detectors, sr = ['DeepQCD s0', 'DeepQCD s1', 'DeepQCD s2', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: 2-day return', 'Rule: volume spike'];
+  let s = '<caption class="cap" style="caption-side:top;text-align:left;padding-bottom:6px">What an alarm is worth to a short seller, at PFA 0.05: the rally still to come at the alarm (percent of the price then), and the same averaged over all rallies (misses count as 0).</caption><tr><th>Detector</th><th class="num">detections</th><th class="num">median delay</th><th class="num">rally left at alarm</th><th class="num">avoided per rally</th></tr>';
+  sr.forEach(n => { const v = S[n].value['0.05']; s += `<tr><td>${n.replace('Rule: ', 'rule: ')}</td><td class="num">${v.n}</td><td class="num">${v.delay_days} days</td><td class="num">${f2(v.remaining_pct)}% of ${f2(v.rally_pct)}%</td><td class="num">${f2(v.avoided_pct_per_rally)}%</td></tr>`; });
+  $('v_squeeze').innerHTML = s;
+  const M = U.mm_pnl;
+  let m = '<caption class="cap" style="caption-side:top;text-align:left;padding-bottom:6px">Replay of 298 held-out Polymarket markets. "Markout on fills": cents per share earned on the trades we filled, 5 minutes later. "P&amp;L": cents per $100 of all traded volume, so strategies that fill less are compared fairly.</caption><tr><th>Strategy</th><th class="num">volume filled</th><th class="num">markout on fills</th><th class="num">P&amp;L</th></tr>';
+  Object.entries(M.strategies).forEach(([n, v]) => { m += `<tr${n === 'oracle' ? ' class="mid"' : ''}><td>${n}</td><td class="num">${Math.round(100 * v.share_of_volume)}%</td><td class="num">${v.cents_per_share >= 0 ? '+' : ''}${v.cents_per_share.toFixed(3)}¢</td><td class="num">${v.pnl_per_100usd_of_all_volume >= 0 ? '+' : ''}${v.pnl_per_100usd_of_all_volume.toFixed(2)}¢</td></tr>`; });
+  $('t_mm').innerHTML = m;
+})();
+
+// ---- curves
+const keys = ['toxic', 'fraud', 'amlworld', 'squeeze', 'credit'];
+$('ucS').innerHTML = keys.map(k => `<option value="${k}">${NAMES[k]}</option>`).join('');
+const chC = chart($('cvC'), (g, W, H) => {
+  const k = $('ucS').value, D = U[k].detectors, xmin = 3e-3;
+  const P = frame(g, W, H, { x0: 1, x1: xmin, xlog: true, y0: 0, y1: 1, xlabel: 'PFA (stricter →)', ylabel: 'PD', ml: 40 });
+  const L = (c, col, w, dash) => line(g, P, c.pfa.map(v => Math.max(v, xmin)), c.pd, col, w, dash);
+  L(D[bestRule(D)], C.rule, 1.8, [6, 4]); L(D['WL-CUSUM'], C.cusum, 2); L(D['Logistic (this step only)'], C.lr, 2);
+  (D.DeepQCD.curves_other_seeds || []).forEach(c => L(c, C.deep, 1)); L(D.DeepQCD, C.deep, 2.4);
+  P.restore();
+});
+function upd() {
+  render(chC);
+  const k = $('ucS').value, D = U[k].detectors;
+  $('cvRead').innerHTML = `${NAMES[k]}: PD against PFA on the held-out streams (${U[k].n_test_events.toLocaleString('en-US')} events, ${U[k].n_test_no.toLocaleString('en-US')} event-free windows), one point per threshold. Best rule: ${bestRule(D).replace('Rule: ', '')}. The curves rise and then fall because a low threshold rings before the event; flat steps come from many windows sharing one statistic (binary rules, quiet windows).`;
+}
+$('ucS').addEventListener('change', upd);
+upd();
+__PROSE__
+})();
+</script>
