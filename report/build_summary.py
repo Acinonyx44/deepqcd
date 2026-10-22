@@ -209,6 +209,83 @@ def scatter(pts):
     return svg(W, H, b, 'Scatter of DeepQCD advantage against the number of labelled training events')
 
 
+# ------------------------------------------------------------------ paper-style curve panels
+COL = {'deep': '#009E73', 'cusum': '#D55E00', 'lr': '#0072B2', 'rule': '#555555', 'shir': '#0072B2', 'sr': '#CC79A7',
+       'rule2': '#999999', 'native': '#B2182B'}
+
+
+def _clean(xs, ys):
+    pts = [(float(x), float(y)) for x, y in zip(xs, ys) if x is not None and y is not None
+           and math.isfinite(float(x)) and math.isfinite(float(y))]
+    pts.sort()
+    return pts
+
+
+def panel(x0, y0, w, h, title, curves, xr=(1e-3, 1.0), yr=(0.0, 1.0), xlabel='PFA', ylabel='PD', alpha=0.05,
+          xticks=(0.001, 0.01, 0.1, 1), yticks=(0, 0.25, 0.5, 0.75, 1)):
+    """One axis box. curves: [(xs, ys, color, width, dash)]; x on a log scale."""
+    ml, mr, mt, mb = 46, 10, 22, 34
+    L, R, T, B = x0 + ml, x0 + w - mr, y0 + mt, y0 + h - mb
+    lx = lambda v: L + (math.log10(v) - math.log10(xr[0])) / (math.log10(xr[1]) - math.log10(xr[0])) * (R - L)
+    ly = lambda v: B - (v - yr[0]) / (yr[1] - yr[0]) * (B - T)
+    o = text(x0 + 6, y0 + 14, title, 12, weight=600)
+    o += f'<rect x="{L}" y="{T}" width="{R - L}" height="{B - T}" fill="none" stroke="currentColor" stroke-width="1"/>'
+    for v in xticks:
+        X = lx(v)
+        o += f'<line x1="{X}" y1="{T}" x2="{X}" y2="{B}" stroke="currentColor" stroke-opacity="0.1"/>'
+        o += text(X, B + 14, f'{v:g}', 10, 'middle', op=0.8)
+    for v in yticks:
+        Y = ly(v)
+        o += f'<line x1="{L}" y1="{Y}" x2="{R}" y2="{Y}" stroke="currentColor" stroke-opacity="0.1"/>'
+        o += text(L - 5, Y + 3.5, f'{v:g}', 10, 'end', op=0.8)
+    if alpha:
+        X = lx(alpha)
+        o += f'<line x1="{X}" y1="{T}" x2="{X}" y2="{B}" stroke="currentColor" stroke-dasharray="3 3" stroke-opacity="0.55"/>'
+        o += text(X + 3, T + 11, f'α = {alpha:g}', 9.5, op=0.75)
+    o += text((L + R) / 2, B + 28, xlabel, 10.5, 'middle', op=0.85)
+    o += f'<text x="{x0 + 11}" y="{(T + B) / 2}" transform="rotate(-90 {x0 + 11} {(T + B) / 2})" text-anchor="middle" font-size="10.5" fill-opacity="0.85">{escape(ylabel)}</text>'
+    for xs, ys, color, width, dash in curves:
+        pts = [(min(max(x, xr[0]), xr[1]), y) for x, y in _clean(xs, ys) if yr[0] <= y <= yr[1]]   # x clamped, y dropped
+        if len(pts) < 2:
+            continue
+        st = [pts[0]]                                    # staircase: only operating points that exist
+        for (xa, ya), (xb, yb) in zip(pts[:-1], pts[1:]):
+            st += [(xb, ya), (xb, yb)]
+        d = ' '.join(f'{lx(x):.1f},{ly(y):.1f}' for x, y in st)
+        da = f' stroke-dasharray="{dash}"' if dash else ''
+        o += f'<polyline points="{d}" fill="none" stroke="{color}" stroke-width="{width}"{da} stroke-linejoin="round"/>'
+    return o
+
+
+def legend(items, W, y=14, x0=8):
+    """Legend entries left to right, wrapping to a new line when the next one would not fit. Returns (svg, height)."""
+    o, x = '', x0
+    for lab, color, dash, width in items:
+        need = 44 + 6.4 * len(lab)
+        if x > x0 and x + need > W - 4:
+            x, y = x0, y + 18
+        da = f' stroke-dasharray="{dash}"' if dash else ''
+        o += f'<line x1="{x}" y1="{y - 4}" x2="{x + 24}" y2="{y - 4}" stroke="{color}" stroke-width="{width}"{da}/>'
+        o += text(x + 30, y, lab, 11)
+        x += need
+    return o, y + 10
+
+
+def grid(panels, cols, items, pw=405, ph=255, label='curves'):
+    """panels: list of (title, curves, kwargs) laid out in cols columns under a shared legend."""
+    rows = math.ceil(len(panels) / cols)
+    W = cols * pw + 10
+    o, top = legend(items, W)
+    for k, (title, curves, kw) in enumerate(panels):
+        o += panel(5 + (k % cols) * pw, top + (k // cols) * ph, pw, ph, title, curves, **kw)
+    return svg(W, rows * ph + top + 2, o, label)
+
+
+def seeds_curves(main, others, color=COL['deep']):
+    out = [(c['pfa'], c['pd'], color, 1, None) for c in others]
+    return out + [(main['pfa'], main['pd'], color, 2.4, None)]
+
+
 # ------------------------------------------------------------------ data
 def numbers():
     U = {k: J('usecases', f'{k}.json') for k in ('toxic', 'amlworld', 'mm_pnl', 'squeeze', 'credit', 'fraud')}
@@ -230,6 +307,138 @@ def table(head, rows, cls=None):
 
 def f2(v):
     return '—' if v is None else f'{v:.2f}'
+
+
+def nice_ticks(hi, n=5):
+    step = [1, 2, 2.5, 5, 10, 20, 25, 50, 100][0]
+    for st in (0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100):
+        if hi / st <= n:
+            step = st
+            break
+    k = math.ceil(hi / step)
+    return [round(i * step, 6) for i in range(k + 1)], k * step
+
+
+def curve_figs(U, A, ME, CH, PN, R):
+    F = {}
+    pd_items = [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('logistic, this step only', COL['lr'], None, 2),
+                ('WL-CUSUM', COL['cusum'], None, 2), ('best rule', COL['rule'], '6 4', 1.8)]
+    # ---- paper: Bayesian, minimax, transient
+    ps = json.load(open(os.path.join(REPO, 'runs', 'paper_sweep', 'iid_p7_mu1.0.s0.json')))
+    tr = json.load(open(os.path.join(REPO, 'runs', 'paper_sweep', 'transient_mu1.0.s0.json')))['evals']['1000,25']
+    b = ps['bayes']
+    yt, ym = (0, 1, 2, 3, 4, 5), 5
+    pa = ('(a) Bayesian, i.i.d. (Fig. 5)', [(b['Shiryaev']['pfa'], b['Shiryaev']['add'], COL['shir'], 2, None),
+                                              (b['DeepQCD']['pfa'], b['DeepQCD']['add'], COL['deep'], 2.4, None)],
+          dict(xr=(1e-3, 0.5), yr=(0, ym), yticks=yt, ylabel='ADD (steps)', alpha=None, xticks=(0.001, 0.01, 0.1, 0.5)))
+    m = ps['minimax']
+    pb = ('(b) Minimax, i.i.d. (Fig. 6)', [(m['CUSUM']['fap'], m['CUSUM']['add200'], COL['cusum'], 2, None),
+                                             (m['DeepQCD']['fap'], m['DeepQCD']['add1'], COL['deep'], 2.4, '6 4'),
+                                             (m['DeepQCD']['fap'], m['DeepQCD']['add200'], COL['deep'], 2.4, None)],
+          dict(xr=(10, 1e5), yr=(0, 3), yticks=(0, 1, 2, 3), xticks=(10, 100, 1000, 10000, 100000), xlabel='FAP (steps between false alarms)',
+               ylabel='ADD (steps)', alpha=None))
+    pc = ('(c) Transient, μ = 1, K = 25 (Fig. 9)', [(tr['WL-CUSUM']['pfa'], tr['WL-CUSUM']['pd'], COL['cusum'], 2, None),
+                                                      (tr['DeepQCD']['pfa'], tr['DeepQCD']['pd'], COL['deep'], 2.4, None)], {})
+    F['PAPER'] = grid([pa, pb, pc], 3, [('DeepQCD', COL['deep'], None, 2.4), ('DeepQCD, change at τ = 1 (b)', COL['deep'], '6 4', 2.4),
+                                        ('Shiryaev (a)', COL['shir'], None, 2), ('CUSUM (b) / WL-CUSUM (c)', COL['cusum'], None, 2)],
+                      pw=272, ph=245, label='Paper figures 5, 6 and 9 reproduced')
+    # ---- real sensors, blocks construction
+    pans = []
+    for ds, name in (('hai', 'HAI'), ('smd', 'SMD'), ('skab', 'SKAB'), ('fog', 'FoG'), ('occupancy', 'Occupancy'),
+                     ('occupancy-nolight', 'Occupancy, no light')):
+        runs = [json.load(open(os.path.join(REPO, 'runs', 'transient_real', f'{ds}.all.s{k}.json')))['evals']['1000,25']['blocks']
+                for k in range(3) if os.path.exists(os.path.join(REPO, 'runs', 'transient_real', f'{ds}.all.s{k}.json'))]
+        cv = [(r['DeepQCD']['pfa'], r['DeepQCD']['pd'], COL['deep'], 2.4 if k == 0 else 1, None) for k, r in enumerate(runs)][::-1]
+        cv = [(runs[0]['WL-CUSUM']['pfa'], runs[0]['WL-CUSUM']['pd'], COL['cusum'], 2, None)] + cv
+        pans.append((name, cv, {}))
+    F['REAL'] = grid(pans, 3, [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2)], pw=272, ph=235,
+                     label='PD against PFA on six real datasets')
+    # ---- synthetic market makers
+    mm = json.load(open(os.path.join(REPO, 'runs', 'mm', 'results.json')))['detectors']
+    names = {'instant': 'instant unwind', 'twap': 'TWAP', 'skew': 'passive skew', 'gamma': 'short gamma', 'lean': 'lean',
+             'withdraw': 'quote withdrawal'}
+    pans = [(t, [(mm['flow z-score']['curves'][k]['pfa'], mm['flow z-score']['curves'][k]['pd'], COL['lr'], 1.8, None),
+                 (mm['WL-CUSUM']['curves'][k]['pfa'], mm['WL-CUSUM']['curves'][k]['pd'], COL['cusum'], 2, None),
+                 (mm['DeepQCD']['curves'][k]['pfa'], mm['DeepQCD']['curves'][k]['pd'], COL['deep'], 2.4, None)], {})
+            for k, t in names.items()]
+    F['MMSIM'] = grid(pans, 3, [('DeepQCD', COL['deep'], None, 2.4), ('WL-CUSUM (per policy)', COL['cusum'], None, 2),
+                                ('flow z-score', COL['lr'], None, 1.8)], pw=272, ph=235, label='PD against PFA per stress policy')
+    # ---- rare changes: ADD against PFA
+    c = R['curves']
+    yt, ym = nice_ticks(50)
+    F['RARE'] = grid([('Deployment rate ρ = 10⁻⁴', [(c['Shiryaev(1e-3), wrong prior']['pfa'], c['Shiryaev(1e-3), wrong prior']['add'], COL['shir'], 1.8, '6 4'),
+                                                     (c['Shiryaev(1e-4), optimal']['pfa'], c['Shiryaev(1e-4), optimal']['add'], COL['shir'], 2, None),
+                                                     (c['DeepQCD B (true rate)']['pfa'], c['DeepQCD B (true rate)']['add'], COL['deep'], 1.8, '6 4'),
+                                                     (c['DeepQCD A (enriched)']['pfa'], c['DeepQCD A (enriched)']['add'], COL['deep'], 2.4, None)],
+                       dict(xr=(1e-3, 0.5), yr=(0, ym), yticks=yt, ylabel='ADD (steps)', alpha=None, xticks=(0.001, 0.01, 0.1, 0.5)))],
+                     1, [('DeepQCD A, trained at 10⁻³', COL['deep'], None, 2.4), ('B, trained at 10⁻⁴', COL['deep'], '6 4', 1.8),
+                         ('Shiryaev(10⁻⁴), optimal', COL['shir'], None, 2), ('Shiryaev(10⁻³)', COL['shir'], '6 4', 1.8)],
+                     pw=640, ph=280, label='ADD against PFA at the deployment rate')
+    # ---- Polymarket news
+    d = PN['detectors']
+    F['PMNEWS'] = grid([('30 surprise events, 9,221 quiet windows',
+                         [(d['Price level']['pfa'], d['Price level']['pd'], COL['rule2'], 1.6, '2 3'),
+                          (d['Price rise over 24 h']['pfa'], d['Price rise over 24 h']['pd'], COL['rule'], 1.8, '6 4'),
+                          (d['WL-CUSUM, all features']['pfa'], d['WL-CUSUM, all features']['pd'], COL['cusum'], 2, None)]
+                         + seeds_curves(d['DeepQCD, all features'], d['DeepQCD, all features'].get('curves_other_seeds', [])), {})],
+                       1, [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2),
+                           ('price rise, 24 h', COL['rule'], '6 4', 1.8), ('price level', COL['rule2'], '2 3', 1.6)],
+                       pw=640, ph=280, label='Polymarket news PD against PFA')
+    # ---- Polymarket wallet labels
+    def pm_cv(Rr):
+        D_ = Rr['detectors']
+        return ([(D_['Flow, last 5 min']['pfa'], D_['Flow, last 5 min']['pd'], COL['lr'], 1.8, None),
+                 (D_['Trades, last 10 min']['pfa'], D_['Trades, last 10 min']['pd'], COL['rule'], 1.8, '6 4'),
+                 (D_['WL-CUSUM']['pfa'], D_['WL-CUSUM']['pd'], COL['cusum'], 2, None)]
+                + [(D_[f'DeepQCD s{k}']['pfa'], D_[f'DeepQCD s{k}']['pd'], COL['deep'], 2.4 if k == 0 else 1, None) for k in (2, 1, 0)])
+    F['FLOW'] = grid([(f'Metaorders ({ME["n_test_events"]} test)', pm_cv(ME), {}), (f'Churn ({CH["n_test_events"]} test)', pm_cv(CH), {})], 2,
+                     [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2),
+                      ('trades, 10 min', COL['rule'], '6 4', 1.8), ('signed flow, 5 min', COL['lr'], None, 1.8)],
+                     pw=405, ph=260, label='Metaorder and churn PD against PFA')
+    # ---- AMLSim
+    Da = A['detectors']
+    F['AMLSIM'] = grid([('2,394 laundering accounts, 4,000 normal windows',
+                         [(Da['Rule: new counterparties (3 days)']['pfa'], Da['Rule: new counterparties (3 days)']['pd'], COL['rule2'], 1.6, '2 3'),
+                          (Da['Rules combined']['pfa'], Da['Rules combined']['pd'], COL['rule'], 1.8, '6 4'),
+                          (Da['WL-CUSUM']['pfa'], Da['WL-CUSUM']['pd'], COL['cusum'], 2, None)]
+                         + [(Da[f'DeepQCD s{k}']['pfa'], Da[f'DeepQCD s{k}']['pd'], COL['deep'], 2.4 if k == 0 else 1, None) for k in (2, 1, 0)], {})],
+                       1, [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2),
+                           ('rules combined', COL['rule'], '6 4', 1.8), ('new counterparties', COL['rule2'], '2 3', 1.6)],
+                       pw=640, ph=280, label='AMLSim PD against PFA')
+    # ---- the six use cases
+    for key, best, title in (('toxic', 'Rule: price move, 5 s', '360 fast runs, 6,000 quiet windows'),
+                             ('fraud', 'Rule: new merchant, above usual amount', '1,680 fraud bursts, 8,000 clean windows'),
+                             ('amlworld', 'Rule: ACH with a new counterparty', '1,676 laundering accounts, 8,000 normal windows'),
+                             ('squeeze', 'Rule: 2-day return', '260 rallies, 8,000 quiet windows'),
+                             ('credit', 'Rule: months late now', '2,019 defaulters, 6,981 other clients')):
+        Dd = U[key]['detectors']
+        cv = [(Dd[best]['pfa'], Dd[best]['pd'], COL['rule'], 1.8, '6 4'),
+              (Dd['WL-CUSUM']['pfa'], Dd['WL-CUSUM']['pd'], COL['cusum'], 2, None),
+              (Dd['Logistic (this step only)']['pfa'], Dd['Logistic (this step only)']['pd'], COL['lr'], 2, None)]
+        cv += seeds_curves(Dd['DeepQCD'], Dd['DeepQCD'].get('curves_other_seeds', []))
+        items = pd_items[:3] + [(best.replace('Rule: ', 'rule: '), COL['rule'], '6 4', 1.8)]
+        F[key.upper()] = grid([(title, cv, dict(alpha=0.01 if key in ('fraud', 'amlworld') else 0.05))], 1, items, pw=640, ph=280,
+                              label=f'{key} PD against PFA')
+    # ---- market-making P&L bars
+    st = U['mm_pnl']['strategies']
+    names = list(st.keys())
+    vals = [st[n]['pnl_per_100usd_of_all_volume'] for n in names]
+    W, rh, left = 660, 26, 250
+    lo, hi = -14, 3
+    sx = lambda v: left + (v - lo) / (hi - lo) * (W - left - 20)
+    o = ''
+    for v in range(lo, hi + 1, 2):
+        o += f'<line x1="{sx(v)}" y1="8" x2="{sx(v)}" y2="{14 + rh * len(names)}" stroke="currentColor" stroke-opacity="{0.5 if v == 0 else 0.1}"/>'
+        o += text(sx(v), 30 + rh * len(names), f'{v:+d}' if v else '0', 10, 'middle', op=0.8)
+    for k, (n, v) in enumerate(zip(names, vals)):
+        y = 12 + rh * k
+        col = '#00704F' if v >= 0 else '#B2182B'
+        o += f'<rect x="{min(sx(0), sx(v))}" y="{y}" width="{abs(sx(v) - sx(0))}" height="{rh - 8}" fill="{col}" fill-opacity="0.85"/>'
+        o += text(left - 8, y + 13, f'{n} ({100 * st[n]["share_of_volume"]:.0f}% of volume)', 11, 'end')
+        o += text(sx(v) + (6 if v >= 0 else -6), y + 13, f'{v:+.2f}', 10.5, 'start' if v >= 0 else 'end', op=0.85)
+    o += text((left + W) / 2, 46 + rh * len(names), 'P&L, cents per $100 of all traded volume (5-minute markouts)', 10.5, 'middle', op=0.85)
+    F['MMBARS'] = svg(W, 54 + rh * len(names), o, 'Market-making replay P&L by strategy')
+    return F
 
 
 def main():
@@ -376,11 +585,14 @@ def main():
                          ['rule: price rise over 24 h', f2(PD['Price rise over 24 h']['pd_at']['0.05']), f'{100 * PD["Price rise over 24 h"]["backtest"]["0.05"]["mean"]:+.1f}'],
                          ['|buy at a random hour', '—', f'{100 * PN["backtest_random"]["mean"]:+.1f}']])
 
+    G = curve_figs(U, A, ME, CH, PN, R)
     html = open(os.path.join(HERE, 'summary_template.html')).read()
     rep = {'__STYLE__': style, '__FIG_BITS__': figs[0], '__FIG_DET__': figs[1], '__PIPE__': pipeline(), '__RARE__': rare_fig(),
            '__MMFIG__': mm_fig(), '__F1__': F1, '__F2__': F2, '__SUMTAB__': sec['summary_table'], '__GH__': GH}
     for k, v in C.items():
         rep[f'__C_{k.upper()}__'] = v
+    for k, v in G.items():
+        rep[f'__G_{k}__'] = v
     for k, v in T.items():
         rep[f'__T_{k.upper()}__'] = v
     for k, v in rep.items():
