@@ -4,6 +4,12 @@
 __STYLE__
 <style>
 .diagwrap svg { min-width: 680px; }
+.feat td { white-space: normal; vertical-align: top; }
+.feat td:nth-child(1) { min-width: 130px; }
+.feat td:nth-child(2) { white-space: nowrap; }
+.feat td:nth-child(3) { min-width: 70px; }
+.feat td:nth-child(4) { min-width: 320px; }
+.feat td:nth-child(5) { min-width: 190px; }
 h3 { margin-top: 6px; }
 .verdict { font-family: var(--sans); font-size: 14px; }
 </style>
@@ -56,7 +62,7 @@ h3 { margin-top: 6px; }
         <li><b>The finance studies add two competitors.</b> A logistic model on the current step's features shows what the same information gives without memory. Rules show what the business runs today.</li>
       </ul>
     </figcaption></figure>
-  <p><b>From records to x[n] and y[n].</b> Every study turns raw records into the same objects (Figure 5). Records are split by the thing being watched (a market, an account, a card, a stock) and aggregated on a clock: one step per second, minute, hour, day, month or transaction. Each step is mapped to the features the business already computes, and standardized with the mean and standard deviation of normal training data (the authors' <span class="mono">do_normalization</span>). The labels come from a rule applied in hindsight, so every event has a known τ₁ and τ₂. Test streams are native: the real history before the event, then the event, never spliced. They are split from training by time, or by bank, market or client.</p>
+  <p><b>From records to x[n] and y[n].</b> Every study turns raw records into the same objects (Figure 5). Records are split by the thing being watched (a market, an account, a card, a stock) and aggregated on a clock: one step per second, minute, hour, day, month or transaction. Each step is mapped to the features the business already computes (listed for every study in Appendix A), and standardized with the mean and standard deviation of normal training data (the authors' <span class="mono">do_normalization</span>). The labels come from a rule applied in hindsight, so every event has a known τ₁ and τ₂. Test streams are native: the real history before the event, then the event, never spliced. They are split from training by time, or by bank, market or client.</p>
   <figure class="diag"><div class="diagwrap">__PIPE__</div>
     <figcaption class="read">The data pipeline shared by all studies. The blocks differ from study to study only in their contents, which each section shows in a diagram of the same form.</figcaption></figure>
   <h3>Reading the numbers</h3>
@@ -269,6 +275,28 @@ h3 { margin-top: 6px; }
     <li><b>Next.</b> The crypto toxic-flow alarm on more symbols and venues. A metaorder detector trained on Polymarket's wallet labels and run on anonymous venues. Loan-level credit data with long histories.</li>
   </ul>
   <p>Code: <a href="__GH__original_qcd.py">original_qcd.py</a> (ports, with tests), <a href="__GH__paper_sweep.py">paper_sweep.py</a>, <a href="__GH__transient_real.py">transient_real.py</a>, <a href="__GH__mm_qcd.py">mm_qcd.py</a>, <a href="__GH__rare_prior.py">rare_prior.py</a>, <a href="__GH__polymarket_qcd.py">polymarket_qcd.py</a>, <a href="__GH__polymarket_meta.py">polymarket_meta.py</a>, <a href="__GH__aml_qcd.py">aml_qcd.py</a>, <a href="__GH__usecases_common.py">usecases_common.py</a> and the six <span class="mono">usecase_*.py</span>; notes in <a href="__GH__notes/usecases.md">notes/</a>.</p>
+</section>
+
+<section class="exp" id="sA">
+  <h2><span class="num">A</span>Features and rules in each study</h2>
+  <p>The features are those each business already computes from its records; nothing is learned before the network. All are standardized with normal training data before they reach DeepQCD, the logistic model and the CUSUM projection z. Counts, volumes and amounts enter as log(1 + ·), and signed flows as sign · log(1 + |·|). The rules use the raw features. “Combined” scales each rule by its 99th percentile on normal training data and takes the maximum, the way a bank runs several scenarios at once.</p>
+  <div class="tablewrap"><table class="feat">
+    <tr><th>Study</th><th>Step</th><th>p</th><th>Features x[n]</th><th>Compared with</th></tr>
+    <tr><td>§2 Paper</td><td>sample</td><td>1 or 7</td><td>The raw samples: i.i.d. Gaussian N(0, I) before the change and N(μ1, I) after; or AR(1) with the mean shifting by μ.</td><td>Shiryaev, CUSUM, window-limited CUSUM (exact likelihoods)</td></tr>
+    <tr><td>§3 Real sensors</td><td>sample</td><td>HAI 57, SMD 38, SKAB 8, Occupancy 5 (4 without light), FoG 3</td><td>Every recorded channel, standardized with normal training data. HAI: plant sensors and actuators. SMD: 38 anonymized server metrics. SKAB: pump accelerometers, current, voltage, pressure, temperature, flow. Occupancy: temperature, humidity, light, CO₂, humidity ratio. FoG: ankle acceleration on three axes.</td><td>Window-limited CUSUM on z</td></tr>
+    <tr><td>§4 Synthetic market makers</td><td>second</td><td>9</td><td>mid return; spread; log best-bid size; log best-ask size; depth imbalance over three levels; signed volume; log total volume; order-flow imbalance; number of trades.</td><td>Window-limited CUSUM on z</td></tr>
+    <tr><td>§5 Rare changes</td><td>sample</td><td>1</td><td>The raw sample: N(0, 1), then N(μ, 1) after a change at a geometric time.</td><td>Shiryaev at the training rate and at the true rate</td></tr>
+    <tr><td>§6.1 Polymarket news</td><td>hour</td><td>8</td><td>price; change in log-odds; signed net flow; gross volume; trades; net flow from wallets new to this market; net flow from wallets less than 7 days old; largest wallet's share of the last 24 h of volume.</td><td>Price level; price rise over 24 h; window-limited CUSUM</td></tr>
+    <tr><td>§6.2 Polymarket wallets (minute clock)</td><td>minute</td><td>9</td><td>trades; signed net flow; gross volume; largest trade; one-sidedness of the last 5 minutes; share of trades in the last 10 minutes with a same-side, ±5% size match within 50 trades; regularity of trade gaps (CV, 10 minutes); price change; trades in the last 10 minutes.</td><td>Flow, last 5 min; trades, last 10 min; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§6.2 Polymarket wallets (order clock)</td><td>taker order</td><td>8</td><td>side; size; gap since the last order; same-side size match; price change; orders in the last 10 minutes; side imbalance of the last 10 orders; same-side run length.</td><td>Flow, last 10 orders; same-side run; similar sizes; window-limited CUSUM</td></tr>
+    <tr><td>§6.3 Polymarket replay</td><td>minute</td><td>9</td><td>The §6.2 minute features. Quotes are pulled on the previous minute's metaorder alarm (CUSUM) or churn alarm (DeepQCD).</td><td>Always quote; step back when busy; oracle</td></tr>
+    <tr><td>§7 Crypto toxic flow</td><td>second</td><td>10</td><td>trades; signed taker notional; gross notional; largest trade; price levels traded; 1-s return; signed share of the last 5 s of volume; trades in the last 10 s; 30-s realized volatility; 5-s return.</td><td>Price move, 5 s; signed flow, 5 s; trades, 10 s; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§8.1 AMLSim</td><td>day</td><td>9</td><td>transfers in; transfers out; amount in; amount out; new senders; new receivers; distinct counterparties over 7 days; pass-through (min of 3-day in and out amounts); largest 7-day degree of today's counterparties (hub contact).</td><td>Pass-through; counterparties 7 d; velocity 7 d; hub contact; new counterparties 3 d; dormant reactivated; dormant + new counterparty; all rules combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§8.2 AMLworld</td><td>transaction</td><td>15</td><td>outgoing; incoming; log USD amount; payment format (ACH, cheque, credit card, cash, wire, bitcoin; one-hot); cross-currency; cross-bank; self-transfer; new counterparty; log hours since the last transaction; counterparty's number of distinct counterparties so far.</td><td>ACH with a new counterparty; amount above usual; new counterparties in the last 5; hub contact; cross-currency; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§8.3 TabFormer fraud</td><td>transaction</td><td>15</td><td>log amount; refund; online; chip; first time at this merchant, city, state or merchant category; foreign; error code; log hours since the last transaction; hour of day (sine, cosine); amount z-score against the card's own history; transactions in the last 24 h.</td><td>Online above usual amount; new state or country; new merchant above usual amount; errors; velocity 24 h; above usual amount; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§8.4 Credit default</td><td>month</td><td>8</td><td>repayment status (months late); utilization (bill / limit); log bill; log payment; payment / previous bill; bill change; log credit limit; age.</td><td>Months late now; utilization; low payment; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§9 Short squeezes</td><td>day</td><td>10</td><td>log return; log volume / 60-day median; FINRA short-volume share; its jump over the 20-day mean; high–low range; overnight gap; 5-day return; 20-day return; 20-day volatility; log distance below the 52-week high.</td><td>2-day return; volume spike; short-share jump; combined; window-limited CUSUM; logistic</td></tr>
+  </table></div>
 </section>
 
 </div>
