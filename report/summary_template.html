@@ -1,0 +1,231 @@
+<title>DeepQCD Study Summary</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+.diagwrap svg { min-width: 680px; }
+h3 { margin-top: 6px; }
+.verdict { font-family: var(--sans); font-size: 14px; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <p>We reproduced DeepQCD (Kurt, Zheng, Yılmaz, Wang, <i>J. Franklin Inst.</i> 2024) from the authors' own code, tested its transient form on real sensor data as asked, and then looked for problems in finance where it beats the detectors practitioners use. In every study the network and its training are the paper's (LSTM(16) → Dense(10) → Dense(1), cross-entropy, 20 epochs; <span class="mono">original_qcd.py</span>). The test is the paper's transient protocol on native streams: an alarm before the event is a false alarm, a first alarm during it is a detection, and each detector's threshold maximizes PD subject to PFA ≤ α (Eq. 11).</p>
+  <p><b>What works.</b> DeepQCD beats the window-limited CUSUM, a learned per-step logistic model and industry rules when three things hold together:</p>
+  <ul class="tight">
+    <li>thousands of labelled events;</li>
+    <li>an event that shows as a combination of cues, read against the entity's own history;</li>
+    <li>a strict false-alarm level.</li>
+  </ul>
+  <p>Crypto price runs, card fraud and laundering meet all three. <b>What does not:</b></p>
+  <ul class="tight">
+    <li><b>Few events.</b> On real sensor data and Polymarket news there are only 7–155 labelled events, and DeepQCD ties or loses.</li>
+    <li><b>One statistic.</b> When a single number carries the event (a price rise, a status, signed flow), the CUSUM is as good and needs no training.</li>
+    <li><b>No trading edge from detection alone.</b> Most of what an alarm detects is already in the price.</li>
+  </ul>
+  <p class="cap">Every study at a glance. "Best other" is the strongest of the window-limited CUSUM, a logistic model on the current step (learned, no memory) and the rules of the trade, at the same false-alarm level.</p>
+  __SUMTAB__
+  <figure class="diag">
+    <div class="diagwrap">__F1__</div>
+    <figcaption class="read">DeepQCD (filled) against the best competitor (open) in each study, at the stated false-alarm level. Green: DeepQCD wins; grey: tie (within about two standard errors); red: it loses.</figcaption>
+  </figure>
+  <figure class="diag">
+    <div class="diagwrap">__F2__</div>
+    <figcaption class="read">DeepQCD's advantage against the number of labelled training events. Every win sits right of about 600 events. But many events are not enough: squeezes, credit and metaorders have hundreds to thousands of events and still tie, because one statistic carries those events. Wins need both many labels and an event made of several cues (filled points).</figcaption>
+  </figure>
+</section>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>The problem, the detectors, and how data becomes a stream</h2>
+  <p><b>Model.</b> A stream x[1], x[2], … is drawn from f₀ until τ₁, from f₁ on [τ₁, τ₂), and from f₀ again: a transient change (paper §5.3). The label bits y[n] are 1 exactly on [τ₁, τ₂). A detector turns x[n] into a statistic d[n] and alarms at Γ, the first n with d[n] ≥ h. Each experiment ends in one of three ways, so PFA + PD + PMD = 1:</p>
+  <ul class="tight">
+    <li><b>False alarm:</b> Γ &lt; τ₁.</li>
+    <li><b>Detection:</b> τ₁ ≤ Γ &lt; τ₂.</li>
+    <li><b>Miss:</b> no alarm before τ₂.</li>
+  </ul>
+  <p>Sweeping h traces a PD–PFA curve. We report PD at PFA ≤ 0.01, 0.05 and 0.1.</p>
+  <figure class="diag"><div class="diagwrap">__FIG_BITS__</div>
+    <figcaption class="read">One transient stream in discrete time, drawn with τ₁ = 8 and K = 6. The label bits select the source of each sample. The detector's statistic, thresholded at h, gives alarm bits a[n]; the first 1 (Γ = 10) falls inside the change, so this is a detection. The bottom rows show the two ways real data was turned into streams in §3: spliced blocks from different recordings (the authors' IoT code) and one native recording.</figcaption></figure>
+  <figure class="diag"><div class="diagwrap">__FIG_DET__</div>
+    <figcaption class="read">The detectors as systems.
+      <ul class="tight">
+        <li><b>DeepQCD</b> is a recurrent filter: an LSTM with its state fed back through z⁻¹, then two dense layers. It is trained offline to reproduce y[n] from x[n].</li>
+        <li><b>The window-limited CUSUM</b> (<span class="mono">window_dec_stat</span>) accumulates the log-likelihood ratio of the last K samples with a floor at 0. On multivariate data it is applied to z = w′(x − m₀)/√(w′C₀w), with w = C₀⁻¹(m₁ − m₀), the Gaussian log-likelihood direction fitted on training data.</li>
+        <li><b>The finance studies add two competitors.</b> A logistic model on the current step's features shows what the same information gives without memory. Rules show what the business runs today.</li>
+      </ul>
+    </figcaption></figure>
+  <p><b>From records to x[n] and y[n].</b> Every study turns raw records into the same objects (Figure 5). Records are split by the thing being watched (a market, an account, a card, a stock) and aggregated on a clock: one step per second, minute, hour, day, month or transaction. Each step is mapped to the features the business already computes, and standardized with the mean and standard deviation of normal training data (the authors' <span class="mono">do_normalization</span>). The labels come from a rule applied in hindsight, so every event has a known τ₁ and τ₂. Test streams are native: the real history before the event, then the event, never spliced. They are split from training by time, or by bank, market or client.</p>
+  <figure class="diag"><div class="diagwrap">__PIPE__</div>
+    <figcaption class="read">The data pipeline shared by all studies. The blocks differ from study to study only in their contents, which each section shows in a diagram of the same form.</figcaption></figure>
+</section>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Reproduction of the paper (synthetic data)</h2>
+  <p>The authors' functions were ported from TensorFlow to PyTorch and each was tested against the original loop. Our curves match the saved notebook outputs.</p>
+  <ul class="tight">
+    <li><b>Bayesian setting (§5.1–5.2).</b> DeepQCD is within 6% of the optimal Shiryaev rule in 6 of 7 settings.</li>
+    <li><b>Minimax setting.</b> Its advantage over CUSUM exists only for a change at τ = 1, where a recurrent network can be extra alert at start-up. For a change at τ = 200 it is never more than 1% faster than CUSUM.</li>
+    <li><b>Transient change (Fig. 9).</b> PD is 0.87 against the paper's 0.86 at PFA 0.05. The window-limited CUSUM, which knows f₀, f₁ and K, is better for a weaker change (μ = 0.5) or a shorter one (K = 10).</li>
+  </ul>
+  <p class="verdict"><b>Reading.</b> With unlimited labelled data the network learns the optimal detector; it does not beat it.</p>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Transient detection on real sensor data</h2>
+  <p>Prof. Wang's request: the transient problem on real data, with the original functions only. Six datasets meet the assumptions of §5.3: labelled intervals, events of at least K = 25 samples, at least 1,024 normal samples before test events, and at least five events each for training and testing.</p>
+  <figure class="diag"><div class="diagwrap">__C_REAL__</div></figure>
+  <p class="cap">PD at PFA ≤ 0.05, τ₁ = 1000, K = 25, blocks construction (the authors'), mean of three seeds.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Dataset</th><th class="num">training events</th><th class="num">DeepQCD</th><th class="num">WL-CUSUM</th></tr>
+    <tr><td>HAI (water treatment testbed)</td><td class="num">30</td><td class="num">0.43</td><td class="num">0.51</td></tr>
+    <tr><td>SMD (server machines)</td><td class="num">155</td><td class="num">0.03</td><td class="num">0.26</td></tr>
+    <tr><td>SKAB (water pump)</td><td class="num">20</td><td class="num">0.15</td><td class="num">0.15</td></tr>
+    <tr><td>FoG (freezing of gait)</td><td class="num">151</td><td class="num">0.06</td><td class="num">0.00</td></tr>
+    <tr><td>Occupancy</td><td class="num">7</td><td class="num">0.95</td><td class="num">1.00</td></tr>
+    <tr><td>Occupancy without the light sensor</td><td class="num">7</td><td class="num">0.47</td><td class="num">0.20</td></tr>
+  </table></div>
+  <p><b>Splicing.</b> The authors' construction glues normal data from one time to event data from another. This creates a jump at τ₁ that is 1.2 to 22.5 times larger than the real onset. On Occupancy without light, the onset step is 2.79 spliced against 0.12 native. DeepQCD's only lead (0.47 against 0.20) is that jump: it disappears on native streams.</p>
+  <p class="verdict"><b>Reading.</b> With tens of real events, DeepQCD does not beat the window-limited CUSUM, and the splicing protocol can create wins that are not real.</p>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Synthetic market makers</h2>
+  <p>An agent-based futures market started at the S&amp;P 500's last close and volatility (FRED). Six market makers each have a stress policy:</p>
+  <ul class="tight">
+    <li>instant unwind;</li>
+    <li>TWAP (equal slices over time);</li>
+    <li>passive skew;</li>
+    <li>short gamma;</li>
+    <li>lean;</li>
+    <li>quote withdrawal.</li>
+  </ul>
+  <p>News jumps act as the confounder and are labelled 0. The simulator's own state gives exact labels.</p>
+  <figure class="diag"><div class="diagwrap">__C_MMSIM__</div></figure>
+  <div class="tablewrap"><table>
+    <tr><th>Stress policy (PD at PFA 0.05)</th><th class="num">DeepQCD</th><th class="num">WL-CUSUM (per policy)</th><th class="num">flow z-score</th></tr>
+    <tr><td>instant unwind</td><td class="num">0.54</td><td class="num"><b>0.94</b></td><td class="num">0.20</td></tr>
+    <tr><td>TWAP</td><td class="num"><b>0.85</b></td><td class="num">0.75</td><td class="num">0.01</td></tr>
+    <tr><td>passive skew</td><td class="num"><b>0.92</b></td><td class="num">0.06</td><td class="num">0.00</td></tr>
+    <tr><td>short gamma</td><td class="num"><b>0.95</b></td><td class="num">0.51</td><td class="num">0.05</td></tr>
+    <tr><td>lean</td><td class="num"><b>0.83</b></td><td class="num">0.17</td><td class="num">0.01</td></tr>
+    <tr><td>quote withdrawal</td><td class="num">0.11</td><td class="num">0.01</td><td class="num">0.00</td></tr>
+    <tr class="mid"><td>news (alarm rate after news, lower is better)</td><td class="num">0.05</td><td class="num">0.06</td><td class="num">0.13</td></tr>
+  </table></div>
+  <p class="verdict"><b>Reading.</b> DeepQCD wins where the stress changes the structure of the flow (passive skew, gamma, lean), which a linear view misses. The CUSUM wins on a loud, one-statistic burst (instant unwind). Fading a detected instant unwind earns about 4 ticks, but only when makers skew openly. The simulator is ours, so this shows what is possible, not what is real.</p>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Rare changes: train where changes are common, deploy where they are rare</h2>
+  <p>Credit, laundering and fraud are rare, but labelled examples are easiest to collect where they are common. In the Bayesian setting the posterior's log-odds move by log(ρ_dep/ρ_tr) when the change rate changes. The paper's §5.1 model trained at ρ = 10⁻³ and run at 10⁻⁴ gives:</p>
+  <ul class="tight">
+    <li><b>Detection is unchanged.</b> ADD at PFA 0.01 is 22.5 against 22.3 for the optimal rule.</li>
+    <li><b>The threshold has to be recalibrated</b>, as in the diagram below.</li>
+  </ul>
+  <figure class="diag"><div class="diagwrap">__RARE__</div></figure>
+  <p class="verdict"><b>Reading.</b> Train on enriched data, calibrate on it, then shift the prior. Neither step needs labelled data at the rare rate. The result is about twice as conservative as the exact posterior (PFA 0.028 against 0.062 at α = 0.1).</p>
+</section>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Prediction markets (Polymarket)</h2>
+  <h3>6.1 Does money move before the news?</h3>
+  <figure class="diag"><div class="diagwrap">__C_PMNEWS__</div></figure>
+  __T_PMNEWS__
+  <p class="verdict"><b>Reading.</b> Only 64 surprise events in 2,083 markets, 34 for training. DeepQCD ties a price rule. Buying YES at any alarm earns less than buying at a random hour, so trading picks up before events but follows the price. Too few events, and no edge.</p>
+  <h3>6.2 Order flow labelled by wallet</h3>
+  <p>Polymarket settles on chain, so every trade carries its wallet. Episodes can be labelled exactly from public data while the detectors see only anonymous flow, the way they would on Kalshi or futures. A <b>metaorder</b> is one wallet working a large order in pieces; it moves the price 2.6¢ on average. <b>Churn</b> is one wallet buying and selling back and forth.</p>
+  <figure class="diag"><div class="diagwrap">__C_FLOW__</div></figure>
+  __T_FLOW__
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>Churn: win.</b> The signature is busy but balanced and repetitive, a combination the CUSUM and the trade count cannot express.</li>
+      <li><b>Metaorders: tie.</b> They are mostly one statistic, signed flow. The CUSUM catches the price-moving ones earlier and saves more per metaorder (0.17¢ against 0.04¢).</li>
+      <li><b>Order clock.</b> One step per order instead of per minute fails for every detector (PD ≤ 0.09).</li>
+    </ul>
+  </p>
+  <h3>6.3 Does an alarm make money for a market maker?</h3>
+  <figure class="diag"><div class="diagwrap">__MMFIG__</div></figure>
+  __T_MM__
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>Quoting against every taker loses money.</b> Over 5 minutes the takers are better informed.</li>
+      <li><b>Churn is the most toxic flow</b> (−0.37¢ per share against −0.23¢ during metaorders), so the churners are skilled scalpers.</li>
+      <li><b>Alarms help.</b> Stepping back on them takes P&amp;L to break-even.</li>
+      <li><b>A "busy" rule does almost as much,</b> because most volume trades in busy minutes.</li>
+      <li><b>The gap is the value of better metaorder detection.</b> Only a perfect metaorder oracle makes money (+1.86¢ per $100), and the gap to it is what a better metaorder detector would be worth.</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s7">
+  <h2><span class="num">7</span>Market makers: a toxic-flow alarm on crypto</h2>
+  <p>A market maker quoting ETH loses when the price runs: whoever trades just before the run knew something. The alarm should ring early in the run so the quotes on that side can be pulled.</p>
+  <figure class="diag"><div class="diagwrap">__C_TOXIC__</div></figure>
+  __T_TOXIC__
+  <p class="verdict"><b>Reading: win.</b>
+    <ul class="tight">
+      <li><b>Detection.</b> DeepQCD catches 0.46 of runs against 0.21 for the best rule, and 0.34 against 0.12 at PFA 0.01. The gain is on the smaller 15–20 bps runs (0.43 against at most 0.13) that simple alarms miss.</li>
+      <li><b>Value.</b> It rings later (median 22 s into a run of about 35 s), but catches so many more that it avoids 2.6–2.7 bps of adverse move per run against 1.6 for the best rule: about 60% more.</li>
+      <li><b>Data.</b> With 40 days instead of 112 the gain was smaller (0.35 against 0.20).</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s8">
+  <h2><span class="num">8</span>Banks</h2>
+  <h3>8.1 Laundering in a simulated bank (IBM AMLSim)</h3>
+  <figure class="diag"><div class="diagwrap">__C_AMLSIM__</div></figure>
+  __T_AMLSIM__
+  <p class="verdict"><b>Reading: win.</b> The network learned a combination: a dormant account (67% of laundering accounts made no transfer in the 120 days before) that suddenly deals with a new counterparty (93% on day one). A dormant-account rule covers part of it. On accounts that were active before their scheme, DeepQCD flags 0.50, against at most 0.12 for any rule or the CUSUM. AMLSim's normal behaviour is simple, so these cues are cleaner than in a real bank.</p>
+  <h3>8.2 Laundering in a realistic bank (IBM AMLworld)</h3>
+  <figure class="diag"><div class="diagwrap">__C_AMLWORLD__</div></figure>
+  __T_AMLWORLD__
+  <p class="verdict"><b>Reading: win at the strict level, tie at the loose one.</b> 87% of laundering transfers are ACH (12% of all transfers), so one yes-or-no rule, "ACH with a new counterparty", reaches 0.64 at PFA 0.05. Being binary, it cannot work below its own false-alarm rate. At PFA 0.01, which is where a bank that must keep alerts down operates, DeepQCD finds 0.41 against 0.27 for the logistic model. We also tried Elliptic++ (real Bitcoin wallets) and dropped it: wallets live a median of one time step and labels never change, so it is classification, not change detection.</p>
+  <h3>8.3 Card fraud and account takeover (IBM TabFormer)</h3>
+  <figure class="diag"><div class="diagwrap">__C_FRAUD__</div></figure>
+  __T_FRAUD__
+  <p class="verdict"><b>Reading: win, most where issuers operate.</b> At PFA 0.01, DeepQCD catches 0.54 of bursts against 0.33 for the logistic model with the same features. The gain is largest when fraud starts online (0.76 against 0.60): an online purchase is normal for one card and alarming for another, and only the card's history tells which. Every detector lets one fraudulent transaction through before its alarm (median).</p>
+  <h3>8.4 Credit-card default</h3>
+  <figure class="diag"><div class="diagwrap">__C_CREDIT__</div></figure>
+  __T_CREDIT__
+  <p class="verdict"><b>Reading: tie.</b> At PFA 0.2, the usual credit operating point, every detector is at 0.62–0.64, and "months late now" is as good as any. Six monthly steps give memory nothing to work with, and the strongest signal is the current status. Freddie Mac or Fannie Mae loan histories would be the stronger test, but they need a registration.</p>
+</section>
+
+<section class="exp" id="s9">
+  <h2><span class="num">9</span>Hedge funds: short-squeeze early warning</h2>
+  <figure class="diag"><div class="diagwrap">__C_SQUEEZE__</div></figure>
+  __T_SQUEEZE__
+  <p class="verdict"><b>Reading: tie.</b> A squeeze is mostly one statistic, the price going up, which a short window over returns already sees. Alarms come about 5 days into a 93% rally with about 17% of it left, saving about 13% per rally for DeepQCD and the CUSUM alike. The volume-spike rule catches fewer rallies (0.41) but earlier, and saves the most (17.6% per rally). For short sellers, speed beats coverage.</p>
+</section>
+
+<section class="exp" id="s10">
+  <h2><span class="num">10</span>What works and what does not</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Condition</th><th>Present in the wins</th><th>Missing in the ties and losses</th></tr>
+    <tr><td>Labelled events</td><td>651 – 10,776 (crypto runs, fraud, AML, churn)</td><td>7 – 155 (real sensors), 34 (Polymarket news)</td></tr>
+    <tr><td>How the event shows</td><td>a combination judged against the entity's history: dormant + new counterparty; online for this card; busy but balanced; many small aggressive trades</td><td>one statistic: a price rise (squeezes, news), a status (credit), signed flow (metaorders, instant unwinds), a mean shift (sensors)</td></tr>
+    <tr><td>False-alarm level</td><td>strict (PFA 0.01: fraud, AML)</td><td>loose levels let one binary rule tie (AMLworld at 0.05)</td></tr>
+    <tr><td>History per entity</td><td>long sequences (cards, accounts, a market's seconds)</td><td>six monthly steps (credit)</td></tr>
+    <tr><td>Construction of the test</td><td>native streams, split by time</td><td>spliced blocks create false wins (Occupancy)</td></tr>
+  </table></div>
+  <ul class="tight">
+    <li><b>The memory is what pays.</b> The logistic model sees the same features one step at a time and loses the winning races by 0.1–0.3 in PD.</li>
+    <li><b>Detection is not profit.</b> Polymarket and the squeezes show that an alarm is worth something only if it comes while the move is still ahead, and markets price most of what can be seen.</li>
+    <li><b>Use it where labels are free.</b> Card issuers (chargebacks), banks (case files), market makers (markouts and price runs), and venues with public wallets. In those settings the network replaces several hand-written rules with one score, at the false-alarm levels those teams use.</li>
+  </ul>
+</section>
+
+<section class="exp" id="s11">
+  <h2><span class="num">11</span>Limits and next steps</h2>
+  <ul class="tight">
+    <li><b>Synthetic data.</b> TabFormer, AMLworld and AMLSim are synthetic (AMLworld and TabFormer realistic). Real bank and issuer data would be the next test.</li>
+    <li><b>Thresholds.</b> Thresholds are set on the test streams, as in the paper. In production they would be set on held-out data with the rare-event recipe of §5.</li>
+    <li><b>Hindsight labels.</b> The crypto run labels come from prices. A real market maker's own markouts would give labels that fit its quotes exactly.</li>
+    <li><b>Replay model.</b> The Polymarket replay ignores queue position and liquidity rewards.</li>
+    <li><b>Next.</b> The crypto toxic-flow alarm on more symbols and venues. A metaorder detector trained on Polymarket's wallet labels and run on anonymous venues. Loan-level credit data with long histories.</li>
+  </ul>
+  <p>Code: <a href="__GH__original_qcd.py">original_qcd.py</a> (ports, with tests), <a href="__GH__paper_sweep.py">paper_sweep.py</a>, <a href="__GH__transient_real.py">transient_real.py</a>, <a href="__GH__mm_qcd.py">mm_qcd.py</a>, <a href="__GH__rare_prior.py">rare_prior.py</a>, <a href="__GH__polymarket_qcd.py">polymarket_qcd.py</a>, <a href="__GH__polymarket_meta.py">polymarket_meta.py</a>, <a href="__GH__aml_qcd.py">aml_qcd.py</a>, <a href="__GH__usecases_common.py">usecases_common.py</a> and the six <span class="mono">usecase_*.py</span>; notes in <a href="__GH__notes/usecases.md">notes/</a>.</p>
+</section>
+
+</div>
