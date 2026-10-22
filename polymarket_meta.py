@@ -42,6 +42,7 @@ import torch
 
 from original_qcd import Model, fit, normalization, scores, window_dec_stat_streams
 from transient_real import projection
+import usecases_common as uc
 
 QUICK = '--quick' in sys.argv
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -55,7 +56,8 @@ if CLOCK == 'minute':
     PRE, MAXLEN, L_NO, WARM, WL_K = 180, 60, 240, 10, 10
 else:  # one step per taker order
     PRE, MAXLEN, L_NO, WARM, WL_K = 150, 60, 210, 10, 10
-SEEDS = (0,) if QUICK else (0, 1, 2)
+GBM = '--gbm' in sys.argv                    # only add the gradient-boosting baseline to the saved results
+SEEDS = () if GBM else (0,) if QUICK else (0, 1, 2)
 EPOCHS = 2 if QUICK else 20
 N_TRAIN_WIN = 800 if QUICK else 6000
 ALPHAS = (0.01, 0.05, 0.1)
@@ -308,6 +310,8 @@ def main():
         det['Flow, last 10 orders'] = np.abs(roll((X[:, :, 0] * size_usd).T, 10).T)
         det['Same-side run'] = X[:, :, 7].astype(float)
         det['Similar sizes, last 10 orders'] = roll(X[:, :, 3].T, 10).T
+    if GBM:
+        det['Gradient boosting (lags)'] = uc.gbm_lags(xs_n, ys, Xn, wins=(10, 30))
     hist, deep = {}, []
     for seed in SEEDS:
         torch.manual_seed(seed)
@@ -367,6 +371,9 @@ def main():
               '  by size at 0.05: ' + ', '.join(f'{k} {v:.2f}' for k, v in out['by_size']['0.05'].items()) +
               f'   delay {out["delay_at"]["0.05"]} min, remaining share {im["remaining_share"]}, caught share {im["caught_share"]:.3f}, '
               f'cents per event {im["per_event_cents"]:.3f}', flush=True)
+    if GBM:
+        uc.add_detector(os.path.join(OUT, 'results.json'), 'Gradient boosting (lags)', res['detectors']['Gradient boosting (lags)'])
+        return
     ds = [res['detectors'][f'DeepQCD s{k}'] for k in range(len(SEEDS))]
     res['detectors']['DeepQCD'] = dict(ds[0], pd_at={a: float(np.mean([x['pd_at'][a] for x in ds])) for a in ds[0]['pd_at']},
                                        pd_at_seeds={a: [x['pd_at'][a] for x in ds] for a in ds[0]['pd_at']},

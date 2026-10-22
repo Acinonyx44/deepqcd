@@ -32,6 +32,7 @@ import usecases_common as uc
 from original_qcd import normalization
 
 QUICK = '--quick' in sys.argv
+GBM = '--gbm' in sys.argv                    # only add the gradient-boosting baseline to the saved results
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'runs', 'quick' if QUICK else '', 'usecases')
 THETA, X_BPS, MAXDUR = 5.0, 15.0, 60
@@ -161,11 +162,6 @@ def main():
     Xn = norm(X)
     print(f'training windows {len(xs)}; test: {n_ev} fast runs after {PRE} quiet seconds, {len(X) - n_ev} quiet windows', flush=True)
 
-    det = {'Logistic (this step only)': uc.logistic_step(xs_n, ys, Xn), 'WL-CUSUM': uc.wl_cusum(xs_n, ys, Xn, WL_K),
-           'Rule: price move, 5 s': np.abs(X[:, :, 9]).astype(float),
-           'Rule: signed flow, 5 s': np.abs(roll(np.sign(X[:, :, 1]) * np.expm1(np.abs(X[:, :, 1])), 5)),
-           'Rule: trades, 10 s': X[:, :, 7].astype(float)}
-    deep, _ = uc.deepqcd(xs_n, ys, Xn, seeds=(0,) if QUICK else (0, 1, 2), epochs=2 if QUICK else 20, rng=rng)
     res = {'settings': {'theta_bps': THETA, 'x_bps': X_BPS, 'maxdur': MAXDUR, 'pre': PRE, 'warm': WARM, 'wl_k': WL_K,
                         'features': FEATURES, 'train_days': len(train_days), 'test_days': len(test_days)},
            'runs_per_day': n_runs, 'n_train_windows': int(len(xs)), 'n_test_events': n_ev, 'n_test_no': int(len(X) - n_ev),
@@ -189,6 +185,17 @@ def main():
                       'avoided_bps_per_run': float(np.sum(rem) / n_ev), 'delay_s': float(np.median(delay)) if delay else None,
                       'run_bps': float(np.mean(sizes))}
         return val
+    if GBM:
+        dd = uc.gbm_lags(xs_n, ys, Xn, wins=(10, 30))
+        o, _ = uc.evaluate(dd, tau1, tau2, n_ev, WARM, valid, groups)
+        o['value'] = value(np.where(valid, dd, -np.inf), o)
+        uc.add_detector(os.path.join(OUT, 'toxic.json'), 'Gradient boosting (lags)', o)
+        return
+    det = {'Logistic (this step only)': uc.logistic_step(xs_n, ys, Xn), 'WL-CUSUM': uc.wl_cusum(xs_n, ys, Xn, WL_K),
+           'Rule: price move, 5 s': np.abs(X[:, :, 9]).astype(float),
+           'Rule: signed flow, 5 s': np.abs(roll(np.sign(X[:, :, 1]) * np.expm1(np.abs(X[:, :, 1])), 5)),
+           'Rule: trades, 10 s': X[:, :, 7].astype(float)}
+    deep, _ = uc.deepqcd(xs_n, ys, Xn, seeds=(0,) if QUICK else (0, 1, 2), epochs=2 if QUICK else 20, rng=rng)
     runs_out = []
     for k, dd in enumerate(deep):
         o, _ = uc.evaluate(dd, tau1, tau2, n_ev, WARM, valid, groups)

@@ -30,6 +30,7 @@ import usecases_common as uc
 from original_qcd import normalization
 
 QUICK = '--quick' in sys.argv
+GBM = '--gbm' in sys.argv                    # only add the gradient-boosting baseline to the saved results
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'runs', 'quick' if QUICK else '', 'usecases')
 PRE, MAXCH, SLACK, WARM, WL_K, GAPTX = 30, 30, 1, 5, 5, 20
@@ -152,11 +153,16 @@ def main():
                 'Rule: above usual amount': lambda A: A[:, :, F['amount_z']]}
     nrm = xs[[y.max() == 0 for y in ys]]
     comb = np.max([fn(X) / max(np.quantile(fn(nrm)[:, WARM:], 0.99), 1e-3) for fn in rule_fns.values()], 0)
+    kind = np.array(kind)
+    groups = {'starts online': kind, 'starts in person': ~kind}
+    if GBM:
+        dd = uc.gbm_lags(xs_n, ys, Xn, wins=(5, 15))
+        o, _ = uc.evaluate(dd, tau1, tau2, n_ev, WARM, valid, groups)
+        uc.add_detector(os.path.join(OUT, 'fraud.json'), 'Gradient boosting (lags)', o)
+        return
     det = {'Logistic (this step only)': uc.logistic_step(xs_n, ys, Xn), 'WL-CUSUM': uc.wl_cusum(xs_n, ys, Xn, WL_K), **{n: fn(X).astype(float) for n, fn in rule_fns.items()},
            'Rules combined': comb.astype(float)}
     deep, _ = uc.deepqcd(xs_n, ys, Xn, seeds=(0,) if QUICK else (0, 1, 2), epochs=2 if QUICK else 20, rng=rng)
-    kind = np.array(kind)
-    groups = {'starts online': kind, 'starts in person': ~kind}
     res = {'settings': {'pre': PRE, 'maxch': MAXCH, 'slack': SLACK, 'warm': WARM, 'wl_k': WL_K, 'gap_tx': GAPTX,
                         'split_year': SPLIT_YEAR, 'features': FEATURES},
            'n_transactions': int(len(d)), 'n_cards': int(len(starts)), 'n_bursts': len(bursts), 'n_train_bursts': len(tr_b),

@@ -39,6 +39,7 @@ import torch
 
 from original_qcd import Model, fit, normalization, scores, window_dec_stat_streams
 from transient_real import projection
+import usecases_common as uc
 
 QUICK = '--quick' in sys.argv
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +49,8 @@ TRAIN_BANKS, TEST_BANKS = (1, 2, 3, 4), (5, 6)
 DAYS, PRE, MAXCH, SLACK, WARM, WL_K = 720, 120, 30, 3, 14, 7
 L = PRE + MAXCH + SLACK
 N_NO_TEST = 1000 if QUICK else 4000
-SEEDS = (0,) if QUICK else (0, 1, 2)
+GBM = '--gbm' in sys.argv                    # only add the gradient-boosting baseline to the saved results
+SEEDS = () if GBM else (0,) if QUICK else (0, 1, 2)
 EPOCHS = 2 if QUICK else 20
 ALPHAS = (0.01, 0.05, 0.1)
 FEATURES = ['n_in', 'n_out', 'amt_in', 'amt_out', 'new_in', 'new_out', 'deg7', 'pass3', 'hub']
@@ -211,6 +213,8 @@ def main():
                 lambda A: A[:, :, 8], newcp, dormant, lambda A: dormant(A) * (newcp(A) > 0)]
     nrm = np.stack([x for x, y in zip(xs, ys) if y.max() == 0])
     det['Rules combined'] = np.max([fn(X) / max(np.quantile(fn(nrm)[:, WARM:], 0.99), 1e-6) for fn in rule_fns], 0).astype(float)
+    if GBM:
+        det['Gradient boosting (lags)'] = uc.gbm_lags(xs_n, ys, Xn, wins=(3, 7))
     hist, deep = {}, []
     for seed in SEEDS:
         torch.manual_seed(seed)
@@ -255,6 +259,9 @@ def main():
         print(f'{name:30s} PD at PFA ' + '  '.join(f'{a}: {out["pd_at"][a]:.3f}' for a in out['pd_at']) +
               f'   at 0.05: main {br["main"]:.2f}, member {br["member"]:.2f}, active before {out["active_before"]["0.05"]:.2f}, '
               f'delay {out["delay_at"]["0.05"]} d', flush=True)
+    if GBM:
+        uc.add_detector(os.path.join(OUT, 'results.json'), 'Gradient boosting (lags)', res['detectors']['Gradient boosting (lags)'])
+        return
     ds = [res['detectors'][f'DeepQCD s{k}'] for k in range(len(SEEDS))]
     res['detectors']['DeepQCD'] = dict(ds[0], pd_at={a: float(np.mean([x['pd_at'][a] for x in ds])) for a in ds[0]['pd_at']},
                                        pd_at_seeds={a: [x['pd_at'][a] for x in ds] for a in ds[0]['pd_at']},

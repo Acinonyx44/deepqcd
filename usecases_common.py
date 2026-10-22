@@ -61,6 +61,63 @@ def logistic_step(xs_tr, ys_tr, X, iters=60, max_rows=2_000_000, seed=0):
     return (X.reshape(-1, X.shape[2]) @ w[:-1] + w[-1]).reshape(X.shape[:2])
 
 
+def lagged(A, lags=5, wins=(10, 30)):
+    """Per-step inputs with a fixed look-back: x[n], x[n-1] .. x[n-lags], and the mean and the max of each feature over
+    the last w steps for each w in wins (zeros before the stream starts). A (n, L, P) -> (n, L, P (1 + lags + 2 len(wins)))."""
+    n, L, P = A.shape
+    parts = [A] + [np.concatenate([np.zeros((n, k, P), A.dtype), A[:, :L - k]], 1) for k in range(1, lags + 1)]
+    c = np.cumsum(A, 1, dtype=np.float64)
+    for w in wins:
+        s = c.copy()
+        s[:, w:] -= c[:, :-w]
+        parts.append((s / np.minimum(np.arange(1, L + 1), w)[None, :, None]).astype(np.float32))
+        m = A.copy()
+        for k in range(1, min(w, L)):
+            m[:, k:] = np.maximum(m[:, k:], A[:, :L - k])
+        parts.append(m)
+    return np.concatenate(parts, 2)
+
+
+def gbm_lags(xs_tr, ys_tr, X, lags=5, wins=(10, 30), max_rows=2_000_000, seed=0, chunk=500):
+    """A strong learner with a fixed look-back instead of memory: gradient-boosted trees (LightGBM) on the lagged inputs,
+    trained per step on the training windows (up to max_rows steps; a seventh of the windows for early stopping, as for
+    DeepQCD). Inputs normalized. Returns raw scores (n, L)."""
+    import lightgbm as lgb
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(len(xs_tr))
+    nv = len(perm) // 7
+    keep = min(1.0, max_rows / ys_tr.size)
+
+    def rows(idx):
+        F, y = [], []
+        for s in range(0, len(idx), chunk):
+            f = lagged(xs_tr[idx[s:s + chunk]], lags, wins)
+            f, t = f.reshape(-1, f.shape[2]), ys_tr[idx[s:s + chunk]].ravel()
+            m = rng.random(len(t)) < keep
+            F.append(f[m]); y.append(t[m])
+        return np.concatenate(F), np.concatenate(y)
+    (Ft, yt), (Fv, yv) = rows(perm[nv:]), rows(perm[:nv])
+    params = dict(objective='binary', learning_rate=0.05, num_leaves=63, min_data_in_leaf=200, feature_fraction=0.8,
+                  bagging_fraction=0.8, bagging_freq=1, lambda_l2=1.0, seed=seed, verbose=-1)
+    bst = lgb.train(params, lgb.Dataset(Ft, yt), 2000, valid_sets=[lgb.Dataset(Fv, yv)],
+                    callbacks=[lgb.early_stopping(50, verbose=False)])
+    print(f'  gradient boosting: {len(yt)} training steps, {bst.best_iteration} trees', flush=True)
+    out = np.empty(X.shape[:2])
+    for s in range(0, len(X), chunk):
+        f = lagged(X[s:s + chunk], lags, wins)
+        out[s:s + chunk] = bst.predict(f.reshape(-1, f.shape[2]), raw_score=True).reshape(f.shape[:2])
+    return out
+
+
+def add_detector(path, name, o):
+    """Add one detector's results to a results file written by a full run (so a new baseline needs no rerun of the rest)."""
+    import json
+    report(name, o)
+    res = json.load(open(path))
+    res['detectors'][name] = o
+    json.dump(res, open(path, 'w'))
+
+
 def evaluate(d, tau1, tau2, n_ev, warm, valid=None, groups=None, n_grid=1000):
     """Transient metrics of one statistic d (n, L). Returns the PD-PFA curve, PD at each alpha, the threshold, the
     per-stream hits at each alpha (for value measures) and PD per group (dict name -> boolean mask over change

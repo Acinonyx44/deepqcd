@@ -30,6 +30,7 @@ import usecases_common as uc
 from original_qcd import normalization
 
 QUICK = '--quick' in sys.argv
+GBM = '--gbm' in sys.argv                    # only add the gradient-boosting baseline to the saved results
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, 'runs', 'quick' if QUICK else '', 'usecases')
 PRE, MAXCH, SLACK, WARM, WL_K = 15, 10, 1, 3, 5
@@ -167,11 +168,16 @@ def main():
     rules = {n: fn(X).astype(float) for n, fn in rule_fns.items()}
     nrm = xs[[y.max() == 0 for y in ys]]                     # raw normal training windows set each rule's scale
     comb = np.max([fn(X) / max(np.quantile(fn(nrm)[:, WARM:], 0.99), 1e-3) for fn in rule_fns.values()], 0)
-    det = {'Logistic (this step only)': uc.logistic_step(xs_n, ys, Xn), 'WL-CUSUM': uc.wl_cusum(xs_n, ys, Xn, WL_K), **rules, 'Rules combined': comb.astype(float)}
-    deep, _ = uc.deepqcd(xs_n, ys, Xn, seeds=(0,) if QUICK else (0, 1, 2), epochs=2 if QUICK else 20, rng=rng)
     fmts = np.array([i['fmt'] for i in info])
     multi = np.array([i['n_laundering'] > 1 for i in info])
     groups = {'ACH': fmts == 'ACH', 'not ACH': fmts != 'ACH', 'one laundering transfer': ~multi, 'several': multi}
+    if GBM:
+        dd = uc.gbm_lags(xs_n, ys, Xn, wins=(5, 15))
+        o, _ = uc.evaluate(dd, tau1, tau2, n_ev, WARM, valid, groups)
+        uc.add_detector(os.path.join(OUT, 'amlworld.json'), 'Gradient boosting (lags)', o)
+        return
+    det = {'Logistic (this step only)': uc.logistic_step(xs_n, ys, Xn), 'WL-CUSUM': uc.wl_cusum(xs_n, ys, Xn, WL_K), **rules, 'Rules combined': comb.astype(float)}
+    deep, _ = uc.deepqcd(xs_n, ys, Xn, seeds=(0,) if QUICK else (0, 1, 2), epochs=2 if QUICK else 20, rng=rng)
     res = {'settings': {'pre': PRE, 'maxch': MAXCH, 'slack': SLACK, 'warm': WARM, 'wl_k': WL_K, 'features': FEATURES},
            'n_transfers': int(len(t)), 'n_accounts': int(len(starts)), 'n_train_events': len(ev_tr),
            'n_train_windows': int(len(xs)), 'n_test_events': n_ev, 'n_test_no': int(len(X) - n_ev),
