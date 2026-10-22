@@ -5,6 +5,11 @@ __STYLE__
 <style>
 .diagwrap svg { min-width: 680px; }
 .feat td { white-space: normal; vertical-align: top; }
+.wraptab td, .wraptab th { white-space: normal; }
+.sumtab td:nth-child(1) { min-width: 130px; }
+.sumtab td:nth-child(4), .sumtab th:nth-child(4), .sumtab td:nth-child(5), .sumtab th:nth-child(5) { text-align: left; }
+.sumtab td:nth-child(4) { min-width: 230px; }
+.sumtab td:nth-child(5) { min-width: 120px; }
 .feat td:nth-child(1) { min-width: 130px; }
 .feat td:nth-child(2) { white-space: nowrap; }
 .feat td:nth-child(3) { min-width: 70px; }
@@ -31,7 +36,8 @@ h3 { margin-top: 6px; }
     <li><b>One statistic.</b> When a single number carries the event (a price rise, a status, signed flow), the CUSUM is as good and needs no training.</li>
     <li><b>No trading edge from detection alone.</b> Most of what an alarm detects is already in the price.</li>
   </ul>
-  <p class="cap">Every study at a glance. "Best other" is the strongest of the window-limited CUSUM, a logistic model on the current step (learned, no memory) and the rules of the trade, at the same false-alarm level.</p>
+  <p><b>A stronger learner without memory.</b> Gradient-boosted trees that see the current step, the five steps before it and recent averages and maxima close most of the gap (§10). DeepQCD keeps a clear lead on crypto price runs (0.46 against 0.29) and a smaller one on AMLworld at PFA 0.01 (0.41 against 0.35). On card fraud, AMLSim, churn and metaorders the two tie. The LSTM's memory pays where an event builds over tens of steps; elsewhere a few steps of history are enough.</p>
+  <p class="cap">Every study at a glance. "Best other" is the strongest of the window-limited CUSUM, a logistic model on the current step (learned, no memory), the rules of the trade and, in the six studies where it was run, gradient boosting on recent steps (GB), at the same false-alarm level.</p>
   __SUMTAB__
   <figure class="diag">
     <div class="diagwrap">__F1__</div>
@@ -39,7 +45,7 @@ h3 { margin-top: 6px; }
   </figure>
   <figure class="diag">
     <div class="diagwrap">__F2__</div>
-    <figcaption class="read">DeepQCD's advantage against the number of labelled training events. Every win sits right of about 600 events. But many events are not enough: squeezes, credit and metaorders have hundreds to thousands of events and still tie, because one statistic carries those events. Wins need both many labels and an event made of several cues (filled points).</figcaption>
+    <figcaption class="read">DeepQCD's advantage over the best competitor against the number of labelled training events. Grey dots show the advantage before gradient boosting joined the competitors. Every lead over the CUSUM, the logistic model and the rules sits right of about 600 events, and only when the event is made of several cues (filled points): squeezes, credit and metaorders have thousands of events and still tie, because one statistic carries them. Gradient boosting removes most of the remaining lead; crypto price runs, and to a lesser degree AMLworld at 1%, keep one.</figcaption>
   </figure>
 </section>
 
@@ -59,7 +65,7 @@ h3 { margin-top: 6px; }
       <ul class="tight">
         <li><b>DeepQCD</b> is a recurrent filter: an LSTM with its state fed back through z⁻¹, then two dense layers. It is trained offline to reproduce y[n] from x[n].</li>
         <li><b>The window-limited CUSUM</b> (<span class="mono">window_dec_stat</span>) accumulates the log-likelihood ratio of the last K samples with a floor at 0. On multivariate data it is applied to z = w′(x − m₀)/√(w′C₀w), with w = C₀⁻¹(m₁ − m₀), the Gaussian log-likelihood direction fitted on training data.</li>
-        <li><b>The finance studies add two competitors.</b> A logistic model on the current step's features shows what the same information gives without memory. Rules show what the business runs today.</li>
+        <li><b>The finance studies add three competitors.</b> A logistic model on the current step's features shows what the same information gives without memory. Gradient-boosted trees (LightGBM) on the current step, the five steps before it, and the mean and maximum of each feature over two recent windows show what a strong learner gives with a fixed look-back instead of memory. Rules show what the business runs today.</li>
       </ul>
     </figcaption></figure>
   <p><b>From records to x[n] and y[n].</b> Every study turns raw records into the same objects (Figure 5). Records are split by the thing being watched (a market, an account, a card, a stock) and aggregated on a clock: one step per second, minute, hour, day, month or transaction. Each step is mapped to the features the business already computes (listed for every study in Appendix A), and standardized with the mean and standard deviation of normal training data (the authors' <span class="mono">do_normalization</span>). The labels come from a rule applied in hindsight, so every event has a known τ₁ and τ₂. Test streams are native: the real history before the event, then the event, never spliced. They are split from training by time, or by bank, market or client.</p>
@@ -171,11 +177,11 @@ h3 { margin-top: 6px; }
   <figure class="diag"><div class="diagwrap">__C_FLOW__</div></figure>
   __T_FLOW__
   <figure class="diag"><div class="diagwrap">__G_FLOW__</div>
-    <figcaption class="read">PD against PFA on the 298 held-out markets. Metaorders: DeepQCD sits slightly above the CUSUM. Churn: DeepQCD is above every other detector by about 0.1 at strict PFA.</figcaption></figure>
+    <figcaption class="read">PD against PFA on the 298 held-out markets. Metaorders: DeepQCD, gradient boosting and the CUSUM lie close together. Churn: DeepQCD and gradient boosting lie together, about 0.1 above the CUSUM and the rules at strict PFA.</figcaption></figure>
   <p class="verdict"><b>Reading.</b>
     <ul class="tight">
-      <li><b>Churn: win.</b> The signature is busy but balanced and repetitive, a combination the CUSUM and the trade count cannot express.</li>
-      <li><b>Metaorders: tie.</b> They are mostly one statistic, signed flow. The CUSUM catches the price-moving ones earlier and saves more per metaorder (0.17¢ against 0.04¢).</li>
+      <li><b>Churn: win over the CUSUM and the rules, tie with gradient boosting</b> (0.43 against 0.42). The signature is busy but balanced and repetitive: a combination the CUSUM and the trade count cannot express, but a few minutes of history show it.</li>
+      <li><b>Metaorders: tie</b> (gradient boosting 0.36). They are mostly one statistic, signed flow. The CUSUM catches the price-moving ones earlier and saves more per metaorder (0.17¢ against 0.04¢).</li>
       <li><b>Order clock.</b> One step per order instead of per minute fails for every detector (PD ≤ 0.09).</li>
     </ul>
   </p>
@@ -201,11 +207,11 @@ h3 { margin-top: 6px; }
   <figure class="diag"><div class="diagwrap">__C_TOXIC__</div></figure>
   __T_TOXIC__
   <figure class="diag"><div class="diagwrap">__G_TOXIC__</div>
-    <figcaption class="read">PD against PFA for crypto fast runs. DeepQCD (green) lies well above the logistic model, the CUSUM and the best rule across the whole range. The three seeds agree.</figcaption></figure>
+    <figcaption class="read">PD against PFA for crypto fast runs. DeepQCD (green) lies well above gradient boosting, the logistic model, the CUSUM and the best rule across the whole range. The three seeds agree.</figcaption></figure>
   <p class="verdict"><b>Reading: win.</b>
     <ul class="tight">
-      <li><b>Detection.</b> DeepQCD catches 0.46 of runs against 0.21 for the best rule, and 0.34 against 0.12 at PFA 0.01. The gain is on the smaller 15–20 bps runs (0.43 against at most 0.13) that simple alarms miss.</li>
-      <li><b>Value.</b> It rings later (median 22 s into a run of about 35 s), but catches so many more that it avoids 2.6–2.7 bps of adverse move per run against 1.6 for the best rule: about 60% more.</li>
+      <li><b>Detection.</b> DeepQCD catches 0.46 of runs against 0.21 for the best rule, and 0.34 against 0.12 at PFA 0.01. Gradient boosting, which sees the last five seconds and 10- and 30-second summaries, reaches 0.29 (0.19 at PFA 0.01), so the gain comes from the memory and not only from a nonlinear learner. It is largest on the smaller 15–20 bps runs (0.43 against 0.24 for gradient boosting and at most 0.13 for the rest), which build over tens of seconds.</li>
+      <li><b>Value.</b> It rings later (median 22 s into a run of about 35 s), but catches so many more that it avoids 2.6–2.7 bps of adverse move per run against 1.6 for the best rule (about 60% more) and 1.8 for gradient boosting.</li>
       <li><b>Data.</b> With 40 days instead of 112 the gain was smaller (0.35 against 0.20).</li>
     </ul>
   </p>
@@ -217,20 +223,20 @@ h3 { margin-top: 6px; }
   <figure class="diag"><div class="diagwrap">__C_AMLSIM__</div></figure>
   __T_AMLSIM__
   <figure class="diag"><div class="diagwrap">__G_AMLSIM__</div>
-    <figcaption class="read">PD against PFA on AMLSim banks 5 and 6. DeepQCD is highest everywhere between PFA 0.3 and 0.01. The flat steps come from the many normal windows without any transfer, which share one statistic.</figcaption></figure>
-  <p class="verdict"><b>Reading: win.</b> The network learned a combination: a dormant account (67% of laundering accounts made no transfer in the 120 days before) that suddenly deals with a new counterparty (93% on day one). A dormant-account rule covers part of it. On accounts that were active before their scheme, DeepQCD flags 0.50, against at most 0.12 for any rule or the CUSUM. AMLSim's normal behaviour is simple, so these cues are cleaner than in a real bank.</p>
+    <figcaption class="read">PD against PFA on AMLSim banks 5 and 6. DeepQCD and gradient boosting lie together, above the rules and the CUSUM everywhere between PFA 0.3 and 0.01. The flat steps come from the many normal windows without any transfer, which share one statistic.</figcaption></figure>
+  <p class="verdict"><b>Reading: win over the rules and the CUSUM; tie with gradient boosting.</b> The network learned a combination: a dormant account (67% of laundering accounts made no transfer in the 120 days before) that suddenly deals with a new counterparty (93% on day one). A dormant-account rule covers part of it. On accounts that were active before their scheme, DeepQCD flags 0.50, against at most 0.12 for any rule or the CUSUM. Gradient boosting, which sees the last week through its window summaries, does as well overall (0.83 against 0.82) and better on these accounts (0.64). AMLSim's normal behaviour is simple, so these cues are cleaner than in a real bank.</p>
   <h3>8.2 Laundering in a realistic bank (IBM AMLworld)</h3>
   <figure class="diag"><div class="diagwrap">__C_AMLWORLD__</div></figure>
   __T_AMLWORLD__
   <figure class="diag"><div class="diagwrap">__G_AMLWORLD__</div>
-    <figcaption class="read">PD against PFA on AMLworld; the dashed line marks α = 0.01. The ACH rule is yes-or-no, so its curve is a single step: no detections below its own false-alarm rate, then 0.64. Below that level DeepQCD is the best detector.</figcaption></figure>
-  <p class="verdict"><b>Reading: win at the strict level, tie at the loose one.</b> 87% of laundering transfers are ACH (12% of all transfers), so one yes-or-no rule, "ACH with a new counterparty", reaches 0.64 at PFA 0.05. Being binary, it cannot work below its own false-alarm rate. At PFA 0.01, which is where a bank that must keep alerts down operates, DeepQCD finds 0.41 against 0.27 for the logistic model. We also tried Elliptic++ (real Bitcoin wallets) and dropped it: wallets live a median of one time step and labels never change, so it is classification, not change detection.</p>
+    <figcaption class="read">PD against PFA on AMLworld; the dashed line marks α = 0.01. The ACH rule is yes-or-no, so its curve is a single step: no detections below its own false-alarm rate, then 0.64. Below that level DeepQCD is the best detector and gradient boosting the second.</figcaption></figure>
+  <p class="verdict"><b>Reading: win at the strict level, tie at the loose one.</b> 87% of laundering transfers are ACH (12% of all transfers), so one yes-or-no rule, "ACH with a new counterparty", reaches 0.64 at PFA 0.05. Being binary, it cannot work below its own false-alarm rate. At PFA 0.01, which is where a bank that must keep alerts down operates, DeepQCD finds 0.41 (seeds 0.36–0.44) against 0.35 for gradient boosting and 0.27 for the logistic model. We also tried Elliptic++ (real Bitcoin wallets) and dropped it: wallets live a median of one time step and labels never change, so it is classification, not change detection.</p>
   <h3>8.3 Card fraud and account takeover (IBM TabFormer)</h3>
   <figure class="diag"><div class="diagwrap">__C_FRAUD__</div></figure>
   __T_FRAUD__
   <figure class="diag"><div class="diagwrap">__G_FRAUD__</div>
-    <figcaption class="read">PD against PFA on TabFormer card fraud; the dashed line marks α = 0.01. DeepQCD (three seeds) leads by about 0.2 at strict PFA. The logistic model and the CUSUM catch up only above PFA 0.05.</figcaption></figure>
-  <p class="verdict"><b>Reading: win, most where issuers operate.</b> At PFA 0.01, DeepQCD catches 0.54 of bursts against 0.33 for the logistic model with the same features. The gain is largest when fraud starts online (0.76 against 0.60): an online purchase is normal for one card and alarming for another, and only the card's history tells which. Every detector lets one fraudulent transaction through before its alarm (median).</p>
+    <figcaption class="read">PD against PFA on TabFormer card fraud; the dashed line marks α = 0.01. At strict PFA, DeepQCD (three seeds) and gradient boosting lead the logistic model and the CUSUM by about 0.2; above PFA 0.05 those catch up.</figcaption></figure>
+  <p class="verdict"><b>Reading: win over the logistic model, the CUSUM and the rules; close to a tie with gradient boosting.</b> At PFA 0.01, DeepQCD catches 0.54 of bursts (seeds 0.50–0.61) against 0.51 for gradient boosting and 0.33 for the logistic model with the same features. An online purchase is normal for one card and alarming for another, and only the card's recent history tells which: both learners that see history gain most on fraud that starts online (at PFA 0.05, gradient boosting 0.80, DeepQCD 0.76, logistic 0.60). DeepQCD is ahead of gradient boosting on fraud that starts in person (0.61 against 0.37). Every detector lets one fraudulent transaction through before its alarm (median).</p>
   <h3>8.4 Credit-card default</h3>
   <figure class="diag"><div class="diagwrap">__C_CREDIT__</div></figure>
   __T_CREDIT__
@@ -250,8 +256,13 @@ h3 { margin-top: 6px; }
 
 <section class="exp" id="s10">
   <h2><span class="num">10</span>What works and what does not</h2>
-  <div class="tablewrap"><table>
-    <tr><th>Condition</th><th>Present in the wins</th><th>Missing in the ties and losses</th></tr>
+  <h3>Is it the memory? A check with gradient boosting</h3>
+  <p>The logistic model differs from DeepQCD in two ways: it is linear, and it has no memory. Gradient-boosted trees separate the two. Each step becomes one row: the current features, the five steps before it, and the mean and maximum of each feature over two recent windows (10 and 30 steps per second or minute, 5 and 15 per transaction, 3 and 7 per day). The trees (LightGBM, early stopping on the same held-out seventh of the training windows as DeepQCD) are trained on the same windows and scored with the same protocol and Eq. 11.</p>
+  __T_GB__
+  <p class="verdict"><b>Reading.</b> Most of DeepQCD's gain over the logistic model comes from nonlinearity and a few steps of history, which gradient boosting also has. The LSTM's memory adds a clear margin on crypto price runs, which build over tens of seconds, and a smaller one on AMLworld at PFA 0.01. Five of the six runs stopped at the 2,000-tree limit, so gradient boosting may gain a little with more trees.</p>
+  <h3>Conditions</h3>
+  <div class="tablewrap"><table class="wraptab">
+    <tr><th>Condition</th><th>Present in the wins over the CUSUM, the logistic model and the rules</th><th>Missing in the ties and losses</th></tr>
     <tr><td>Labelled events</td><td>651 – 10,776 (crypto runs, fraud, AML, churn)</td><td>7 – 155 (real sensors), 34 (Polymarket news)</td></tr>
     <tr><td>How the event shows</td><td>a combination judged against the entity's history: dormant + new counterparty; online for this card; busy but balanced; many small aggressive trades</td><td>one statistic: a price rise (squeezes, news), a status (credit), signed flow (metaorders, instant unwinds), a mean shift (sensors)</td></tr>
     <tr><td>False-alarm level</td><td>strict (PFA 0.01: fraud, AML)</td><td>loose levels let one binary rule tie (AMLworld at 0.05)</td></tr>
@@ -259,7 +270,7 @@ h3 { margin-top: 6px; }
     <tr><td>Construction of the test</td><td>native streams, split by time</td><td>spliced blocks create false wins (Occupancy)</td></tr>
   </table></div>
   <ul class="tight">
-    <li><b>The memory is what pays.</b> The logistic model sees the same features one step at a time and loses the winning races by 0.1–0.3 in PD.</li>
+    <li><b>Memory pays most where events build slowly.</b> The logistic model sees the same features one step at a time and loses the winning races by 0.1–0.3 in PD. Gradient boosting with a few steps of history closes most of that gap; the LSTM keeps a clear lead on crypto price runs.</li>
     <li><b>Detection is not profit.</b> Polymarket and the squeezes show that an alarm is worth something only if it comes while the move is still ahead, and markets price most of what can be seen.</li>
     <li><b>Use it where labels are free.</b> Card issuers (chargebacks), banks (case files), market makers (markouts and price runs), and venues with public wallets. In those settings the network replaces several hand-written rules with one score, at the false-alarm levels those teams use.</li>
   </ul>
@@ -272,7 +283,7 @@ h3 { margin-top: 6px; }
     <li><b>Thresholds.</b> Thresholds are set on the test streams, as in the paper. In production they would be set on held-out data with the rare-event recipe of §5.</li>
     <li><b>Hindsight labels.</b> The crypto run labels come from prices. A real market maker's own markouts would give labels that fit its quotes exactly.</li>
     <li><b>Replay model.</b> The Polymarket replay ignores queue position and liquidity rewards.</li>
-    <li><b>Next.</b> The crypto toxic-flow alarm on more symbols and venues. A metaorder detector trained on Polymarket's wallet labels and run on anonymous venues. Loan-level credit data with long histories.</li>
+    <li><b>Next.</b> Gradient boosting with longer look-backs, and DeepQCD given the same window summaries as inputs. The crypto toxic-flow alarm on more symbols and venues. A metaorder detector trained on Polymarket's wallet labels and run on anonymous venues. Loan-level credit data with long histories.</li>
   </ul>
   <p>Code: <a href="__GH__original_qcd.py">original_qcd.py</a> (ports, with tests), <a href="__GH__paper_sweep.py">paper_sweep.py</a>, <a href="__GH__transient_real.py">transient_real.py</a>, <a href="__GH__mm_qcd.py">mm_qcd.py</a>, <a href="__GH__rare_prior.py">rare_prior.py</a>, <a href="__GH__polymarket_qcd.py">polymarket_qcd.py</a>, <a href="__GH__polymarket_meta.py">polymarket_meta.py</a>, <a href="__GH__aml_qcd.py">aml_qcd.py</a>, <a href="__GH__usecases_common.py">usecases_common.py</a> and the six <span class="mono">usecase_*.py</span>; notes in <a href="__GH__notes/usecases.md">notes/</a>.</p>
 </section>
@@ -287,13 +298,13 @@ h3 { margin-top: 6px; }
     <tr><td>§4 Synthetic market makers</td><td>second</td><td>9</td><td>mid return; spread; log best-bid size; log best-ask size; depth imbalance over three levels; signed volume; log total volume; order-flow imbalance; number of trades.</td><td>Window-limited CUSUM on z</td></tr>
     <tr><td>§5 Rare changes</td><td>sample</td><td>1</td><td>The raw sample: N(0, 1), then N(μ, 1) after a change at a geometric time.</td><td>Shiryaev at the training rate and at the true rate</td></tr>
     <tr><td>§6.1 Polymarket news</td><td>hour</td><td>8</td><td>price; change in log-odds; signed net flow; gross volume; trades; net flow from wallets new to this market; net flow from wallets less than 7 days old; largest wallet's share of the last 24 h of volume.</td><td>Price level; price rise over 24 h; window-limited CUSUM</td></tr>
-    <tr><td>§6.2 Polymarket wallets (minute clock)</td><td>minute</td><td>9</td><td>trades; signed net flow; gross volume; largest trade; one-sidedness of the last 5 minutes; share of trades in the last 10 minutes with a same-side, ±5% size match within 50 trades; regularity of trade gaps (CV, 10 minutes); price change; trades in the last 10 minutes.</td><td>Flow, last 5 min; trades, last 10 min; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§6.2 Polymarket wallets (minute clock)</td><td>minute</td><td>9</td><td>trades; signed net flow; gross volume; largest trade; one-sidedness of the last 5 minutes; share of trades in the last 10 minutes with a same-side, ±5% size match within 50 trades; regularity of trade gaps (CV, 10 minutes); price change; trades in the last 10 minutes.</td><td>Flow, last 5 min; trades, last 10 min; window-limited CUSUM; gradient boosting</td></tr>
     <tr><td>§6.2 Polymarket wallets (order clock)</td><td>taker order</td><td>8</td><td>side; size; gap since the last order; same-side size match; price change; orders in the last 10 minutes; side imbalance of the last 10 orders; same-side run length.</td><td>Flow, last 10 orders; same-side run; similar sizes; window-limited CUSUM</td></tr>
     <tr><td>§6.3 Polymarket replay</td><td>minute</td><td>9</td><td>The §6.2 minute features. Quotes are pulled on the previous minute's metaorder alarm (CUSUM) or churn alarm (DeepQCD).</td><td>Always quote; step back when busy; oracle</td></tr>
-    <tr><td>§7 Crypto toxic flow</td><td>second</td><td>10</td><td>trades; signed taker notional; gross notional; largest trade; price levels traded; 1-s return; signed share of the last 5 s of volume; trades in the last 10 s; 30-s realized volatility; 5-s return.</td><td>Price move, 5 s; signed flow, 5 s; trades, 10 s; window-limited CUSUM; logistic</td></tr>
-    <tr><td>§8.1 AMLSim</td><td>day</td><td>9</td><td>transfers in; transfers out; amount in; amount out; new senders; new receivers; distinct counterparties over 7 days; pass-through (min of 3-day in and out amounts); largest 7-day degree of today's counterparties (hub contact).</td><td>Pass-through; counterparties 7 d; velocity 7 d; hub contact; new counterparties 3 d; dormant reactivated; dormant + new counterparty; all rules combined; window-limited CUSUM; logistic</td></tr>
-    <tr><td>§8.2 AMLworld</td><td>transaction</td><td>15</td><td>outgoing; incoming; log USD amount; payment format (ACH, cheque, credit card, cash, wire, bitcoin; one-hot); cross-currency; cross-bank; self-transfer; new counterparty; log hours since the last transaction; counterparty's number of distinct counterparties so far.</td><td>ACH with a new counterparty; amount above usual; new counterparties in the last 5; hub contact; cross-currency; combined; window-limited CUSUM; logistic</td></tr>
-    <tr><td>§8.3 TabFormer fraud</td><td>transaction</td><td>15</td><td>log amount; refund; online; chip; first time at this merchant, city, state or merchant category; foreign; error code; log hours since the last transaction; hour of day (sine, cosine); amount z-score against the card's own history; transactions in the last 24 h.</td><td>Online above usual amount; new state or country; new merchant above usual amount; errors; velocity 24 h; above usual amount; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§7 Crypto toxic flow</td><td>second</td><td>10</td><td>trades; signed taker notional; gross notional; largest trade; price levels traded; 1-s return; signed share of the last 5 s of volume; trades in the last 10 s; 30-s realized volatility; 5-s return.</td><td>Price move, 5 s; signed flow, 5 s; trades, 10 s; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§8.1 AMLSim</td><td>day</td><td>9</td><td>transfers in; transfers out; amount in; amount out; new senders; new receivers; distinct counterparties over 7 days; pass-through (min of 3-day in and out amounts); largest 7-day degree of today's counterparties (hub contact).</td><td>Pass-through; counterparties 7 d; velocity 7 d; hub contact; new counterparties 3 d; dormant reactivated; dormant + new counterparty; all rules combined; window-limited CUSUM; gradient boosting</td></tr>
+    <tr><td>§8.2 AMLworld</td><td>transaction</td><td>15</td><td>outgoing; incoming; log USD amount; payment format (ACH, cheque, credit card, cash, wire, bitcoin; one-hot); cross-currency; cross-bank; self-transfer; new counterparty; log hours since the last transaction; counterparty's number of distinct counterparties so far.</td><td>ACH with a new counterparty; amount above usual; new counterparties in the last 5; hub contact; cross-currency; combined; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§8.3 TabFormer fraud</td><td>transaction</td><td>15</td><td>log amount; refund; online; chip; first time at this merchant, city, state or merchant category; foreign; error code; log hours since the last transaction; hour of day (sine, cosine); amount z-score against the card's own history; transactions in the last 24 h.</td><td>Online above usual amount; new state or country; new merchant above usual amount; errors; velocity 24 h; above usual amount; combined; window-limited CUSUM; logistic; gradient boosting</td></tr>
     <tr><td>§8.4 Credit default</td><td>month</td><td>8</td><td>repayment status (months late); utilization (bill / limit); log bill; log payment; payment / previous bill; bill change; log credit limit; age.</td><td>Months late now; utilization; low payment; combined; window-limited CUSUM; logistic</td></tr>
     <tr><td>§9 Short squeezes</td><td>day</td><td>10</td><td>log return; log volume / 60-day median; FINRA short-volume share; its jump over the 20-day mean; high–low range; overnight gap; 5-day return; 20-day return; 20-day volatility; log distance below the 52-week high.</td><td>2-day return; volume spike; short-share jump; combined; window-limited CUSUM; logistic</td></tr>
   </table></div>

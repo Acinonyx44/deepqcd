@@ -10,6 +10,7 @@ from html import escape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
+GB = 'Gradient boosting (lags)'
 GH = 'https://github.com/Acinonyx44/deepqcd/blob/claude/awesome-allen-8e9wvl/'
 FONT = 'Source Sans 3, Helvetica Neue, Arial, sans-serif'
 
@@ -197,8 +198,11 @@ def scatter(pts):
         b += text(l - 6, Y + 4, f'{a:+.1f}' if a else '0', 10.5, 'end', op=0.8)
     b += text((l + W - r) / 2, H - 12, 'labelled training events (log scale)', 11, 'middle', op=0.85)
     b += f'<text x="14" y="{(t + H - bm) / 2}" transform="rotate(-90 14 {(t + H - bm) / 2})" text-anchor="middle" font-size="11" fill-opacity="0.85">PD advantage over the best competitor</text>'
-    for lab, n, a, kind, dx, dy in pts:
+    for lab, n, a, kind, dx, dy, *before in pts:
         X, Y = lx(n), ly(a)
+        if before:
+            b += f'<line x1="{X}" y1="{ly(before[0])}" x2="{X}" y2="{Y}" stroke="#888888" stroke-width="1.4" stroke-dasharray="3 3"/>'
+            b += f'<circle cx="{X}" cy="{ly(before[0])}" r="3.5" fill="#AAAAAA"/>'
         if kind == 'combo':
             b += f'<circle cx="{X}" cy="{Y}" r="5.5" fill="#009E73"/>'
         else:
@@ -206,12 +210,13 @@ def scatter(pts):
         b += text(X + dx, Y + dy, lab, 10.5, 'start' if dx >= 0 else 'end', op=0.9)
     b += f'<circle cx="{l + 12}" cy="{t + 14}" r="5.5" fill="#009E73"/>' + text(l + 22, t + 18, 'the event shows as a combination of cues', 11)
     b += f'<circle cx="{l + 12}" cy="{t + 32}" r="5" fill="#FFFFFF" stroke="#222222" stroke-width="1.6"/>' + text(l + 22, t + 36, 'one statistic carries the event', 11)
+    b += f'<circle cx="{l + 12}" cy="{t + 50}" r="3.5" fill="#AAAAAA"/>' + text(l + 22, t + 54, 'before gradient boosting joined the competitors', 11)
     return svg(W, H, b, 'Scatter of DeepQCD advantage against the number of labelled training events')
 
 
 # ------------------------------------------------------------------ paper-style curve panels
 COL = {'deep': '#009E73', 'cusum': '#D55E00', 'lr': '#0072B2', 'rule': '#555555', 'shir': '#0072B2', 'sr': '#CC79A7',
-       'rule2': '#999999', 'native': '#B2182B'}
+       'rule2': '#999999', 'native': '#B2182B', 'gb': '#CC79A7'}
 
 
 def _clean(xs, ys):
@@ -297,7 +302,7 @@ def numbers():
 
 
 def table(head, rows, cls=None):
-    h = '<div class="tablewrap"><table><tr>' + ''.join(f'<th{" class=\"num\"" if i else ""}>{c}</th>' for i, c in enumerate(head)) + '</tr>'
+    h = f'<div class="tablewrap"><table{f" class=\"{cls}\"" if cls else ""}><tr>' + ''.join(f'<th{" class=\"num\"" if i else ""}>{c}</th>' for i, c in enumerate(head)) + '</tr>'
     for r in rows:
         mid = r[0].startswith('|')
         cells = [r[0].lstrip('|')] + list(r[1:])
@@ -323,6 +328,8 @@ def curve_figs(U, A, ME, CH, PN, R):
     F = {}
     pd_items = [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('logistic, this step only', COL['lr'], None, 2),
                 ('WL-CUSUM', COL['cusum'], None, 2), ('best rule', COL['rule'], '6 4', 1.8)]
+    gb_item = ('gradient boosting, lagged inputs', COL['gb'], None, 2)
+    gb_cv = lambda D_: [(D_[GB]['pfa'], D_[GB]['pd'], COL['gb'], 2, None)] if GB in D_ else []
     # ---- paper: Bayesian, minimax, transient
     ps = json.load(open(os.path.join(REPO, 'runs', 'paper_sweep', 'iid_p7_mu1.0.s0.json')))
     tr = json.load(open(os.path.join(REPO, 'runs', 'paper_sweep', 'transient_mu1.0.s0.json')))['evals']['1000,25']
@@ -389,10 +396,10 @@ def curve_figs(U, A, ME, CH, PN, R):
         D_ = Rr['detectors']
         return ([(D_['Flow, last 5 min']['pfa'], D_['Flow, last 5 min']['pd'], COL['lr'], 1.8, None),
                  (D_['Trades, last 10 min']['pfa'], D_['Trades, last 10 min']['pd'], COL['rule'], 1.8, '6 4'),
-                 (D_['WL-CUSUM']['pfa'], D_['WL-CUSUM']['pd'], COL['cusum'], 2, None)]
+                 (D_['WL-CUSUM']['pfa'], D_['WL-CUSUM']['pd'], COL['cusum'], 2, None)] + gb_cv(D_)
                 + [(D_[f'DeepQCD s{k}']['pfa'], D_[f'DeepQCD s{k}']['pd'], COL['deep'], 2.4 if k == 0 else 1, None) for k in (2, 1, 0)])
     F['FLOW'] = grid([(f'Metaorders ({ME["n_test_events"]} test)', pm_cv(ME), {}), (f'Churn ({CH["n_test_events"]} test)', pm_cv(CH), {})], 2,
-                     [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2),
+                     [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), gb_item, ('WL-CUSUM', COL['cusum'], None, 2),
                       ('trades, 10 min', COL['rule'], '6 4', 1.8), ('signed flow, 5 min', COL['lr'], None, 1.8)],
                      pw=405, ph=260, label='Metaorder and churn PD against PFA')
     # ---- AMLSim
@@ -400,9 +407,9 @@ def curve_figs(U, A, ME, CH, PN, R):
     F['AMLSIM'] = grid([('2,394 laundering accounts, 4,000 normal windows',
                          [(Da['Rule: new counterparties (3 days)']['pfa'], Da['Rule: new counterparties (3 days)']['pd'], COL['rule2'], 1.6, '2 3'),
                           (Da['Rules combined']['pfa'], Da['Rules combined']['pd'], COL['rule'], 1.8, '6 4'),
-                          (Da['WL-CUSUM']['pfa'], Da['WL-CUSUM']['pd'], COL['cusum'], 2, None)]
+                          (Da['WL-CUSUM']['pfa'], Da['WL-CUSUM']['pd'], COL['cusum'], 2, None)] + gb_cv(Da)
                          + [(Da[f'DeepQCD s{k}']['pfa'], Da[f'DeepQCD s{k}']['pd'], COL['deep'], 2.4 if k == 0 else 1, None) for k in (2, 1, 0)], {})],
-                       1, [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), ('WL-CUSUM', COL['cusum'], None, 2),
+                       1, [('DeepQCD (3 seeds)', COL['deep'], None, 2.4), gb_item, ('WL-CUSUM', COL['cusum'], None, 2),
                            ('rules combined', COL['rule'], '6 4', 1.8), ('new counterparties', COL['rule2'], '2 3', 1.6)],
                        pw=640, ph=280, label='AMLSim PD against PFA')
     # ---- the six use cases
@@ -414,9 +421,9 @@ def curve_figs(U, A, ME, CH, PN, R):
         Dd = U[key]['detectors']
         cv = [(Dd[best]['pfa'], Dd[best]['pd'], COL['rule'], 1.8, '6 4'),
               (Dd['WL-CUSUM']['pfa'], Dd['WL-CUSUM']['pd'], COL['cusum'], 2, None),
-              (Dd['Logistic (this step only)']['pfa'], Dd['Logistic (this step only)']['pd'], COL['lr'], 2, None)]
+              (Dd['Logistic (this step only)']['pfa'], Dd['Logistic (this step only)']['pd'], COL['lr'], 2, None)] + gb_cv(Dd)
         cv += seeds_curves(Dd['DeepQCD'], Dd['DeepQCD'].get('curves_other_seeds', []))
-        items = pd_items[:3] + [(best.replace('Rule: ', 'rule: '), COL['rule'], '6 4', 1.8)]
+        items = pd_items[:1] + ([gb_item] if GB in Dd else []) + pd_items[1:3] + [(best.replace('Rule: ', 'rule: '), COL['rule'], '6 4', 1.8)]
         F[key.upper()] = grid([(title, cv, dict(alpha=0.01 if key in ('fraud', 'amlworld') else 0.05))], 1, items, pw=640, ph=280,
                               label=f'{key} PD against PFA')
     # ---- market-making P&L bars
@@ -499,14 +506,24 @@ def main():
 
     # numbers for the overview figures
     dt, df, da, dsq, dcr = D('toxic'), D('fraud'), D('amlworld'), D('squeeze'), D('credit')
+    def best(dd, a, names):
+        v, n = max((pdx(dd[n], a), n) for n in names if n in dd)
+        return v, n
+    LR, CU = 'Logistic (this step only)', 'WL-CUSUM'
+    bt = best(dt, '0.05', [GB, LR, CU, 'Rule: price move, 5 s'])[0]
+    bf = best(df, '0.01', [GB, LR, CU, 'Rules combined'])[0]
+    ba = best(da, '0.01', [GB, LR, CU])[0]
+    bs = best(A['detectors'], '0.05', [GB, CU, 'Rules combined'])[0]
+    bc = best(CH['detectors'], '0.05', [GB, CU, 'Trades, last 10 min', 'Flow, last 5 min'])[0]
+    bm = best(ME['detectors'], '0.05', [GB, CU, 'Trades, last 10 min', 'Flow, last 5 min'])[0]
     rows = [
-        ('Crypto toxic flow (PFA 0.05)', pdx(dt['DeepQCD'], '0.05'), pdx(dt['Rule: price move, 5 s'], '0.05'), 'price rule', '0.05', 'win'),
-        ('Card fraud (PFA 0.01)', pdx(df['DeepQCD'], '0.01'), pdx(df['Logistic (this step only)'], '0.01'), 'logistic', '0.01', 'win'),
-        ('AMLworld laundering (PFA 0.01)', pdx(da['DeepQCD'], '0.01'), pdx(da['Logistic (this step only)'], '0.01'), 'logistic', '0.01', 'win'),
-        ('AMLSim laundering (PFA 0.05)', pdx(A['detectors']['DeepQCD'], '0.05'), pdx(A['detectors']['Rules combined'], '0.05'), 'rules', '0.05', 'win'),
-        ('Polymarket churn (PFA 0.05)', pdx(CH['detectors']['DeepQCD'], '0.05'), pdx(CH['detectors']['WL-CUSUM'], '0.05'), 'CUSUM', '0.05', 'win'),
+        ('Crypto toxic flow (PFA 0.05)', pdx(dt['DeepQCD'], '0.05'), bt, 'gradient boosting', '0.05', 'win'),
+        ('AMLworld laundering (PFA 0.01)', pdx(da['DeepQCD'], '0.01'), ba, 'gradient boosting', '0.01', 'win'),
         ('Synthetic MM, passive skew', 0.92, 0.06, 'CUSUM', '0.05', 'win'),
-        ('Polymarket metaorders (PFA 0.05)', pdx(ME['detectors']['DeepQCD'], '0.05'), pdx(ME['detectors']['WL-CUSUM'], '0.05'), 'CUSUM', '0.05', 'tie'),
+        ('Card fraud (PFA 0.01)', pdx(df['DeepQCD'], '0.01'), bf, 'gradient boosting', '0.01', 'tie'),
+        ('AMLSim laundering (PFA 0.05)', pdx(A['detectors']['DeepQCD'], '0.05'), bs, 'gradient boosting', '0.05', 'tie'),
+        ('Polymarket churn (PFA 0.05)', pdx(CH['detectors']['DeepQCD'], '0.05'), bc, 'gradient boosting', '0.05', 'tie'),
+        ('Polymarket metaorders (PFA 0.05)', pdx(ME['detectors']['DeepQCD'], '0.05'), bm, 'gradient boosting', '0.05', 'tie'),
         ('Paper transient, Fig. 9 (PFA 0.05)', 0.87, 0.86, 'WL-CUSUM', '0.05', 'tie'),
         ('Short squeezes (PFA 0.05)', pdx(dsq['DeepQCD'], '0.05'), pdx(dsq['WL-CUSUM'], '0.05'), 'CUSUM', '0.05', 'tie'),
         ('Card default (PFA 0.05)', pdx(dcr['DeepQCD'], '0.05'), pdx(dcr['WL-CUSUM'], '0.05'), 'CUSUM', '0.05', 'tie'),
@@ -519,14 +536,14 @@ def main():
         ('Synthetic MM, instant unwind', 0.54, 0.94, 'CUSUM', '0.05', 'loss'),
     ]
     F1 = dotplot(rows)
-    sc = [('toxic flow', 10776, pdx(dt['DeepQCD'], '0.05') - pdx(dt['Rule: price move, 5 s'], '0.05'), 'combo', -10, -8),
-          ('card fraud @1%', 3104, pdx(df['DeepQCD'], '0.01') - pdx(df['Logistic (this step only)'], '0.01'), 'combo', -10, -8),
-          ('AMLworld @1%', 2799, pdx(da['DeepQCD'], '0.01') - pdx(da['Logistic (this step only)'], '0.01'), 'combo', -10, 14),
-          ('AMLSim', 6442, pdx(A['detectors']['DeepQCD'], '0.05') - pdx(A['detectors']['Rules combined'], '0.05'), 'combo', 9, 4),
-          ('churn', 651, pdx(CH['detectors']['DeepQCD'], '0.05') - pdx(CH['detectors']['WL-CUSUM'], '0.05'), 'combo', 9, 4),
-          ('metaorders', 4634, pdx(ME['detectors']['DeepQCD'], '0.05') - pdx(ME['detectors']['WL-CUSUM'], '0.05'), 'single', 9, 4),
-          ('squeezes', 968, pdx(dsq['DeepQCD'], '0.05') - pdx(dsq['WL-CUSUM'], '0.05'), 'single', 9, -6),
-          ('credit', 4645, pdx(dcr['DeepQCD'], '0.05') - pdx(dcr['WL-CUSUM'], '0.05'), 'single', 9, 14),
+    sc = [('toxic flow', 10776, pdx(dt['DeepQCD'], '0.05') - bt, 'combo', -10, -8, pdx(dt['DeepQCD'], '0.05') - pdx(dt['Rule: price move, 5 s'], '0.05')),
+          ('fraud @1%', 3104, pdx(df['DeepQCD'], '0.01') - bf, 'combo', 9, -3, pdx(df['DeepQCD'], '0.01') - pdx(df[LR], '0.01')),
+          ('AMLworld @1%', 2799, pdx(da['DeepQCD'], '0.01') - ba, 'combo', -10, -4, pdx(da['DeepQCD'], '0.01') - pdx(da[LR], '0.01')),
+          ('AMLSim', 6442, pdx(A['detectors']['DeepQCD'], '0.05') - bs, 'combo', 9, -6, pdx(A['detectors']['DeepQCD'], '0.05') - pdx(A['detectors']['Rules combined'], '0.05')),
+          ('churn', 651, pdx(CH['detectors']['DeepQCD'], '0.05') - bc, 'combo', -10, 14, pdx(CH['detectors']['DeepQCD'], '0.05') - pdx(CH['detectors']['WL-CUSUM'], '0.05')),
+          ('metaorders, credit', 4634, pdx(ME['detectors']['DeepQCD'], '0.05') - bm, 'single', -8, 18),
+          ('squeezes', 968, pdx(dsq['DeepQCD'], '0.05') - pdx(dsq['WL-CUSUM'], '0.05'), 'single', 8, -8),
+          ('', 4645, pdx(dcr['DeepQCD'], '0.05') - pdx(dcr['WL-CUSUM'], '0.05'), 'single', 9, 14),
           ('Polymarket news', 34, PN['detectors']['DeepQCD, all features']['pd_at']['0.05'] - PN['detectors']['Price rise over 24 h']['pd_at']['0.05'], 'single', 9, 4),
           ('HAI', 30, -0.08, 'single', 9, 4), ('SMD', 155, -0.23, 'single', 9, 4), ('SKAB', 20, 0.0, 'single', 9, -6),
           ('Occupancy', 7, -0.05, 'single', 9, 4), ('FoG', 151, 0.06, 'single', 9, -6)]
@@ -541,21 +558,21 @@ def main():
          ['|Synthetic market makers', 'market, second', 'simulated', 'skew 0.92 vs 0.06; instant 0.54 vs 0.94', 'mixed'],
          ['Rare changes', 'synthetic, step', 'unlimited', 'train at 10× rate costs nothing; calibrate + shift gives PFA ≤ α', '<span class="y">works</span>'],
          ['Polymarket news', 'market, hour', '34', f'{f2(PN["detectors"]["DeepQCD, all features"]["pd_at"]["0.05"])} vs {f2(PN["detectors"]["Price rise over 24 h"]["pd_at"]["0.05"])} (price rule)', 'tie; no trading edge'],
-         ['AMLSim', 'account, day', '6,442', f'{f2(pdx(A["detectors"]["DeepQCD"], "0.05"))} vs {f2(pdx(A["detectors"]["Rules combined"], "0.05"))} (rules)', '<span class="y">win</span>'],
-         ['Polymarket metaorders', 'market, minute', '4,634', f'{f2(pdx(ME["detectors"]["DeepQCD"], "0.05"))} vs {f2(pdx(ME["detectors"]["WL-CUSUM"], "0.05"))}; CUSUM saves more', 'tie'],
-         ['Polymarket churn', 'market, minute', '651', f'{f2(pdx(CH["detectors"]["DeepQCD"], "0.05"))} vs {f2(pdx(CH["detectors"]["WL-CUSUM"], "0.05"))}', '<span class="y">win</span>'],
-         ['|Crypto toxic flow', 'market, second', '10,776', f'{f2(pdx(dt["DeepQCD"], "0.05"))} vs {f2(pdx(dt["Rule: price move, 5 s"], "0.05"))}; 2.6 vs 1.6 bps saved per run', '<span class="y">win</span>'],
-         ['Card fraud', 'card, transaction', '3,104', f'at PFA 0.01: {f2(pdx(df["DeepQCD"], "0.01"))} vs {f2(pdx(df["Logistic (this step only)"], "0.01"))}', '<span class="y">win</span>'],
-         ['AMLworld', 'account, transaction', '2,799', f'at 0.01: {f2(pdx(da["DeepQCD"], "0.01"))} vs {f2(pdx(da["Logistic (this step only)"], "0.01"))}; at 0.05: {f2(pdx(da["DeepQCD"], "0.05"))} vs {f2(pdx(da["Rule: ACH with a new counterparty"], "0.05"))}', '<span class="y">win at 1%</span>, tie at 5%'],
+         ['AMLSim', 'account, day', '6,442', f'{f2(pdx(A["detectors"]["DeepQCD"], "0.05"))} vs {f2(bs)} (gradient boosting), {f2(pdx(A["detectors"]["Rules combined"], "0.05"))} (rules)', 'tie with GB; beats rules'],
+         ['Polymarket metaorders', 'market, minute', '4,634', f'{f2(pdx(ME["detectors"]["DeepQCD"], "0.05"))} vs {f2(bm)} (GB), {f2(pdx(ME["detectors"]["WL-CUSUM"], "0.05"))} (CUSUM); CUSUM saves more', 'tie'],
+         ['Polymarket churn', 'market, minute', '651', f'{f2(pdx(CH["detectors"]["DeepQCD"], "0.05"))} vs {f2(bc)} (GB), {f2(pdx(CH["detectors"]["WL-CUSUM"], "0.05"))} (CUSUM)', 'tie with GB; beats CUSUM'],
+         ['|Crypto toxic flow', 'market, second', '10,776', f'{f2(pdx(dt["DeepQCD"], "0.05"))} vs {f2(bt)} (GB), {f2(pdx(dt["Rule: price move, 5 s"], "0.05"))} (rule); 2.6 vs 1.8 bps saved per run', '<span class="y">win</span>'],
+         ['Card fraud', 'card, transaction', '3,104', f'at PFA 0.01: {f2(pdx(df["DeepQCD"], "0.01"))} vs {f2(bf)} (GB), {f2(pdx(df[LR], "0.01"))} (logistic)', 'tie with GB; beats the rest'],
+         ['AMLworld', 'account, transaction', '2,799', f'at 0.01: {f2(pdx(da["DeepQCD"], "0.01"))} vs {f2(ba)} (GB); at 0.05: {f2(pdx(da["DeepQCD"], "0.05"))} vs {f2(pdx(da["Rule: ACH with a new counterparty"], "0.05"))} (ACH rule)', '<span class="y">win at 1%</span>, tie at 5%'],
          ['Polymarket market making', 'market, minute', '—', f'P&amp;L {ms["always quote"]["pnl_per_100usd_of_all_volume"]:+.1f}¢ → {ms["step back on either alarm"]["pnl_per_100usd_of_all_volume"]:+.2f}¢ per $100; busy rule {ms["step back when busy"]["pnl_per_100usd_of_all_volume"]:+.2f}¢', 'alarms help; DeepQCD adds little'],
          ['Short squeezes', 'stock, day', '968', f'{f2(pdx(dsq["DeepQCD"], "0.05"))} vs {f2(pdx(dsq["WL-CUSUM"], "0.05"))}', 'tie'],
-         ['Card default', 'client, month', '≈ 4,600', f'{f2(pdx(dcr["DeepQCD"], "0.05"))} vs {f2(pdx(dcr["WL-CUSUM"], "0.05"))}; all ≈ 0.63 at PFA 0.2', 'tie']])
+         ['Card default', 'client, month', '≈ 4,600', f'{f2(pdx(dcr["DeepQCD"], "0.05"))} vs {f2(pdx(dcr["WL-CUSUM"], "0.05"))}; all ≈ 0.63 at PFA 0.2', 'tie']], cls='wraptab sumtab')
 
     def dtab(dd, names, alphas=('0.01', '0.05', '0.1'), seeds_on=True):
         rs = []
         for i, n in enumerate(names):
             d = dd[n]
-            row = [('|' if i == 3 else '') + n.replace('Rule: ', 'rule: ')]
+            row = [('|' if n.startswith('Rule') and not names[i - 1].startswith('Rule') else '') + n.replace('Rule: ', 'rule: ').replace(GB, 'gradient boosting, lagged inputs')]
             for a in alphas:
                 s = f'<b>{f2(d["pd_at"][a])}</b>' if n == 'DeepQCD' else f2(d['pd_at'][a])
                 if n == 'DeepQCD' and seeds_on and a == '0.05' and 'pd_at_seeds' in d:
@@ -565,19 +582,37 @@ def main():
         return table(['Detector'] + [f'PFA {a}' for a in alphas], rs)
 
     T = {}
-    T['toxic'] = dtab(dt, ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: price move, 5 s', 'Rule: trades, 10 s', 'Rule: signed flow, 5 s'])
-    T['fraud'] = dtab(df, ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', 'Rules combined', 'Rule: new merchant, above usual amount', 'Rule: online, above usual amount'])
-    T['amlworld'] = dtab(da, ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: ACH with a new counterparty', 'Rule: new counterparties, last 5'])
+    T['toxic'] = dtab(dt, ['DeepQCD', GB, 'Logistic (this step only)', 'WL-CUSUM', 'Rule: price move, 5 s', 'Rule: trades, 10 s', 'Rule: signed flow, 5 s'])
+    T['fraud'] = dtab(df, ['DeepQCD', GB, 'Logistic (this step only)', 'WL-CUSUM', 'Rules combined', 'Rule: new merchant, above usual amount', 'Rule: online, above usual amount'])
+    T['amlworld'] = dtab(da, ['DeepQCD', GB, 'Logistic (this step only)', 'WL-CUSUM', 'Rule: ACH with a new counterparty', 'Rule: new counterparties, last 5'])
     T['squeeze'] = dtab(dsq, ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: 2-day return', 'Rule: volume spike'])
     T['credit'] = dtab(dcr, ['DeepQCD', 'Logistic (this step only)', 'WL-CUSUM', 'Rule: months late now', 'Rule: utilization'])
-    T['amlsim'] = dtab(A['detectors'], ['DeepQCD', 'WL-CUSUM', 'Rules combined', 'Rule: dormant account reactivated', 'Rule: new counterparties (3 days)'])
+    T['amlsim'] = dtab(A['detectors'], ['DeepQCD', GB, 'WL-CUSUM', 'Rules combined', 'Rule: dormant account reactivated', 'Rule: new counterparties (3 days)'])
     T['flow'] = table(['Detector', 'metaorders, PFA 0.05', 'churn, PFA 0.05', 'churn, PFA 0.01'],
                       [['DeepQCD', f'<b>{f2(pdx(ME["detectors"]["DeepQCD"], "0.05"))}</b>', f'<b>{f2(pdx(CH["detectors"]["DeepQCD"], "0.05"))}</b>', f'<b>{f2(pdx(CH["detectors"]["DeepQCD"], "0.01"))}</b>'],
+                       ['gradient boosting, lagged inputs', f2(pdx(ME['detectors'][GB], '0.05')), f2(pdx(CH['detectors'][GB], '0.05')), f2(pdx(CH['detectors'][GB], '0.01'))],
                        ['WL-CUSUM', f2(pdx(ME['detectors']['WL-CUSUM'], '0.05')), f2(pdx(CH['detectors']['WL-CUSUM'], '0.05')), f2(pdx(CH['detectors']['WL-CUSUM'], '0.01'))],
                        ['rule: trades, 10 min', f2(pdx(ME['detectors']['Trades, last 10 min'], '0.05')), f2(pdx(CH['detectors']['Trades, last 10 min'], '0.05')), f2(pdx(CH['detectors']['Trades, last 10 min'], '0.01'))],
                        ['rule: signed flow, 5 min', f2(pdx(ME['detectors']['Flow, last 5 min'], '0.05')), f2(pdx(CH['detectors']['Flow, last 5 min'], '0.05')), f2(pdx(CH['detectors']['Flow, last 5 min'], '0.01'))]])
     T['mm'] = table(['Strategy', 'volume filled', 'markout on fills (¢/share)', 'P&amp;L (¢ per $100 of all volume)'],
                     [[('|' if n == 'oracle' else '') + n, f'{100 * v["share_of_volume"]:.0f}%', f'{v["cents_per_share"]:+.3f}', f'{v["pnl_per_100usd_of_all_volume"]:+.2f}'] for n, v in ms.items()])
+    def gbrow(lab, dd, a, others):
+        d = dd['DeepQCD']
+        s_ = f'<b>{f2(pdx(d, a))}</b>'
+        if 'pd_at_seeds' in d:
+            s_ += f' <span class="note">({min(d["pd_at_seeds"][a]):.2f}–{max(d["pd_at_seeds"][a]):.2f})</span>'
+        o_ = max((pdx(dd[n], a), n) for n in others if n in dd)
+        return [lab, a, s_, f2(pdx(dd[GB], a)), f2(pdx(dd[LR], a)) if LR in dd else '—',
+                f'{f2(o_[0])} ({o_[1].replace("Rule: ", "rule: ").replace("Rules combined", "rules combined")})']
+    T['gb'] = table(['Study', 'PFA', 'DeepQCD (seed range)', 'gradient boosting', 'logistic', 'best of CUSUM and rules'],
+                    [gbrow('Crypto toxic flow', dt, '0.05', [CU, 'Rule: price move, 5 s', 'Rule: trades, 10 s', 'Rule: signed flow, 5 s']),
+                     gbrow('AMLworld', da, '0.01', [CU, 'Rule: ACH with a new counterparty', 'Rules combined']),
+                     gbrow('AMLworld', da, '0.05', [CU, 'Rule: ACH with a new counterparty', 'Rules combined']),
+                     gbrow('Card fraud', df, '0.01', [CU, 'Rules combined', 'Rule: new merchant, above usual amount']),
+                     gbrow('Card fraud', df, '0.05', [CU, 'Rules combined', 'Rule: new merchant, above usual amount']),
+                     gbrow('AMLSim', A['detectors'], '0.05', [CU, 'Rules combined']),
+                     gbrow('Polymarket churn', CH['detectors'], '0.05', [CU, 'Trades, last 10 min', 'Flow, last 5 min']),
+                     gbrow('Polymarket metaorders', ME['detectors'], '0.05', [CU, 'Trades, last 10 min', 'Flow, last 5 min'])])
     PD = PN['detectors']
     T['pmnews'] = table(['Detector', 'PFA 0.05', 'buy YES at first alarm (¢ per contract)'],
                         [['DeepQCD', f'<b>{f2(PD["DeepQCD, all features"]["pd_at"]["0.05"])}</b>', f'{100 * PD["DeepQCD, all features"]["backtest"]["0.05"]["mean"]:+.1f}'],

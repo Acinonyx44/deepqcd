@@ -106,6 +106,41 @@ public. `runs/run_usecases.sh` runs all six one after another.
   - At PFA 0.2, the usual credit operating point, everyone is at 0.62-0.64.
 - **Stronger data needs registration.** Freddie Mac and Fannie Mae loan histories would be the better test.
 
+## Gradient boosting with lagged inputs
+
+The logistic model differs from DeepQCD in two ways: it is linear and it has no memory. To separate the two, each
+winning study was rerun with gradient-boosted trees (LightGBM, `uc.gbm_lags`):
+- **Inputs.** Each step becomes one row: the current features, the five steps before it, and the mean and maximum of
+  each feature over two recent windows. The windows are 10 and 30 steps per second or minute, 5 and 15 per
+  transaction, and 3 and 7 per day.
+- **Training.** The trees are trained on the same windows as DeepQCD, with early stopping on the same held-out seventh.
+- **Scoring.** The same protocol and Eq. 11.
+- **Running it.** Rerun a study with `--gbm` (`usecase_toxic.py`, `usecase_fraud.py`, `usecase_amlworld.py`,
+  `aml_qcd.py`, `polymarket_meta.py --target churn|metaorder`). It rebuilds the same windows, skips the other
+  detectors, and adds `Gradient boosting (lags)` to the saved results file.
+
+| Study | PFA | DeepQCD (seed range) | Gradient boosting | Logistic | Verdict against gradient boosting |
+|---|---|---|---|---|---|
+| Crypto toxic flow | 0.05 | 0.46 (0.44-0.48) | 0.29 | 0.14 | DeepQCD wins |
+| Crypto toxic flow | 0.01 | 0.34 (0.34-0.35) | 0.19 | 0.08 | DeepQCD wins |
+| AMLworld | 0.01 | 0.41 (0.36-0.44) | 0.35 | 0.27 | DeepQCD ahead |
+| AMLworld | 0.05 | 0.62 (0.60-0.64) | 0.59 | 0.60 | tie (ACH rule 0.64) |
+| Card fraud | 0.01 | 0.54 (0.50-0.61) | 0.51 | 0.33 | tie |
+| Card fraud | 0.05 | 0.69 (0.64-0.74) | 0.61 | 0.66 | DeepQCD slightly ahead |
+| AMLSim | 0.05 | 0.82 (0.80-0.87) | 0.83 | - | tie |
+| Polymarket churn | 0.05 | 0.42 (0.40-0.45) | 0.43 | - | tie |
+| Polymarket metaorders | 0.05 | 0.38 (0.34-0.40) | 0.36 | - | tie |
+
+- **Crypto.** The LSTM's lead is largest on 15-20 bps runs: 0.43 against 0.24 for gradient boosting. Gradient
+  boosting avoids 1.8 bps per run, against 2.6 for DeepQCD.
+- **Card fraud.** Gradient boosting is better on fraud that starts online (0.80 against 0.76 at PFA 0.05) and worse on
+  fraud that starts in person (0.37 against 0.61).
+- **AMLSim.** Gradient boosting flags 0.64 of accounts that were active before their scheme, against 0.50 for DeepQCD.
+- **Trees.** Five of the six runs stopped at the 2,000-tree limit, so more trees may add a little.
+- **Reading.** Most of the gain over the logistic model comes from nonlinearity and a few steps of history. The
+  LSTM's memory adds a clear margin only where the event builds over tens of steps (crypto runs), and a smaller one on
+  AMLworld at PFA 0.01.
+
 ## Reading
 
 - **DeepQCD wins** when three things hold:
@@ -114,7 +149,7 @@ public. `runs/run_usecases.sh` runs all six one after another.
   - a strict false-alarm level.
 
   That is crypto runs, card fraud, and AML at 1%. The per-step logistic model, with the same features, loses by
-  0.1-0.3 in PD, so the gain comes from reading the sequence.
+  0.1-0.3 in PD. Gradient boosting with a few steps of history closes most of that gap, except on crypto runs.
 - **It ties** when the signal is price-led and slow (squeezes) or the history is short and the current status says it
   all (credit).
 - **For market makers, alarms that pull quotes in busy or toxic periods turn losses into break-even.** But a busy
