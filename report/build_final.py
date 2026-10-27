@@ -150,21 +150,21 @@ def fig_kinds(B, key='aml-hi-medium'):
     S = B[key]['streaming']['detectors']
     kinds = sorted(S['DeepQCD']['by_kind'], key=lambda g: -S['DeepQCD']['by_kind'][g][1])
     W, rh, left = 820, 30, 230
-    H = 30 + rh * len(kinds) + 40
+    H = 44 + rh * len(kinds) + 40
     sx = lambda v: left + v * (W - left - 30)
     o = ''
     for v in (0, 0.25, 0.5, 0.75, 1):
-        o += f'<line x1="{sx(v)}" y1="22" x2="{sx(v)}" y2="{H - 34}" stroke="currentColor" stroke-opacity="0.12"/>'
+        o += f'<line x1="{sx(v)}" y1="36" x2="{sx(v)}" y2="{H - 34}" stroke="currentColor" stroke-opacity="0.12"/>'
         o += text(sx(v), H - 20, f'{v:g}', 10, 'middle', op=0.8)
     o += text((left + W) / 2, H - 4, 'share of laundering accounts alerted while active (5 false alert-days per 1,000)', 10.5, 'middle', op=0.85)
     for k, g in enumerate(kinds):
-        y = 26 + rh * k
+        y = 40 + rh * k
         n = S['DeepQCD']['by_kind'][g][1]
         o += text(left - 8, y + 14, f'{g.lower()} ({n})', 11, 'end')
         for j, (d, c) in enumerate((('DeepQCD', COL['deep']), (GB, COLS[GB]))):
             v = S[d]['by_kind'][g][0]
             o += f'<rect x="{sx(0)}" y="{y + 3 + 11 * j}" width="{sx(v) - sx(0)}" height="9" fill="{c}"/>'
-    lg, _ = legend([('DeepQCD (ensemble)', COL['deep'], None, 6), ('gradient boosting', COLS[GB], None, 6)], 500, y=12, x0=left)
+    lg, _ = legend([('DeepQCD (ensemble)', COL['deep'], None, 6), ('gradient boosting', COLS[GB], None, 6)], W, y=16, x0=left)
     return svg(W, H, o + lg, 'Detection by laundering pattern for DeepQCD and gradient boosting')
 
 
@@ -367,6 +367,9 @@ def main():
                     '__T_PMG__': tab_groups_pm(P)})
     if R:
         rep.update({'__F_REPLAY__': fig_replay(R), '__T_REPLAY__': tab_replay(R)})
+    tp = os.path.join(HERE, 'final_text.json')
+    if os.path.exists(tp):
+        rep.update({f'__{k}__': v for k, v in json.load(open(tp)).items()})
     html = open(os.path.join(HERE, 'final_template.html')).read()
     for k, v in rep.items():
         html = html.replace(k, v)

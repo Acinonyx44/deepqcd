@@ -1,0 +1,104 @@
+<title>DeepQCD Final Studies</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+.diagwrap svg { min-width: 680px; }
+.wraptab td, .wraptab th { white-space: normal; }
+.wraptab td:first-child { min-width: 120px; }
+h3 { margin-top: 6px; }
+.verdict { font-family: var(--sans); font-size: 14px; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  __SUMMARY__
+</section>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Protocol</h2>
+  <p>The network, its training and the transient metrics are the paper's and the authors' (LSTM(16) → Dense(10) → Dense(1), cross-entropy, 20 epochs; <span class="mono">original_qcd.py</span>). Five things change against the earlier studies, to answer the open points: thresholds chosen on the test data, one seed, no intervals, no stronger baseline, and windows instead of whole histories.</p>
+  <ul class="tight">
+    <li><b>Three periods.</b> Training before p₀, calibration [p₀, p₁), test [p₁, p₂). Every threshold is chosen on the calibration period (the paper's Eq. 11 there) and applied unchanged to the test period, which reports the realized PFA next to PD. Eq. 11 on the test streams themselves is kept as the oracle curve.</li>
+    <li><b>Five seeds and their ensemble.</b> The detector is the mean of five DeepQCD outputs, the version one would deploy.</li>
+    <li><b>Bootstrap intervals.</b> 1,000 resamples of the event streams and of the normal windows give 95% intervals for PD and PFA, and for the paired difference in PD between DeepQCD and gradient boosting.</li>
+    <li><b>Gradient boosting</b> (LightGBM on the current step, the five before it, and the mean and maximum of each feature over two recent windows) joins the logistic model, the window-limited CUSUM and the rules of the trade.</li>
+    <li><b>Streaming.</b> Every account or card is scored at every transaction of the calibration and test periods, from its last PRE + 1 transactions, as a bank would run the alarm. The threshold gives a target number of false alert-days per 1,000 active entity-days in the calibration period.</li>
+  </ul>
+  <figure class="diag"><div class="diagwrap">__F_PROTOCOL__</div>
+    <figcaption class="read">The protocol in time and the streaming evaluation. An entity-day is active if the account or card transacts that day. An alert-day is false if no flagged span of the entity covers the transaction that raised it.</figcaption></figure>
+</section>
+
+<div class="part">Part A · Banks: laundering and card fraud</div>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Data at scale</h2>
+  __DATA_TEXT__
+  __T_DATA__
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Detection with calibrated thresholds</h2>
+  __W_TEXT__
+  <p class="cap">PD on the test streams with the threshold set on the calibration period for α = 0.01, with its 95% interval and the realized PFA in brackets. The last column is the paired difference between DeepQCD and gradient boosting.</p>
+  __T_W01__
+  <p class="cap">The same for α = 0.05.</p>
+  __T_W05__
+  <figure class="diag"><div class="diagwrap">__F_FOREST__</div>
+    <figcaption class="read">PD on test with 95% bootstrap intervals, thresholds from the calibration period.</figcaption></figure>
+  <figure class="diag"><div class="diagwrap">__F_WCURVES__</div>
+    <figcaption class="read">PD against PFA on the test streams (every threshold; the dashed line marks α = 0.01).</figcaption></figure>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Streaming: every account, every transaction</h2>
+  __S_TEXT__
+  <p class="cap">Share of laundering accounts or fraud bursts alerted while active, read off each detector's test curve at the same realized number of false alert-days per 1,000 active entity-days.</p>
+  __T_SEQ__
+  <figure class="diag"><div class="diagwrap">__F_STREAM__</div>
+    <figcaption class="read">Share of episodes alerted against false alert-days per 1,000 active entity-days on the test period (log scale).</figcaption></figure>
+  <p class="cap">With the threshold set in the calibration period for 5 false alert-days per 1,000: the realized rate on test, the share alerted (95% interval), and the share of the episode's money that came at or after the first alert.</p>
+  __T_S5__
+  <figure class="diag"><div class="diagwrap">__F_KINDS__</div>
+    <figcaption class="read">__KINDS_CAP__</figcaption></figure>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>More labels</h2>
+  __L_TEXT__
+  <figure class="diag"><div class="diagwrap">__F_LEARN__</div>
+    <figcaption class="read">PD on test (calibrated thresholds) against the number of training windows with an event, for DeepQCD (two seeds) and gradient boosting trained on 10%, 30% and 100% of the training events.</figcaption></figure>
+</section>
+
+<div class="part">Part B · Prediction markets</div>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Polymarket at scale</h2>
+  __PM_TEXT__
+  <p class="cap">PD on the test markets with the threshold from the calibration markets, α = 0.05 (95% interval; realized PFA in brackets).</p>
+  __T_PM05__
+  <p class="cap">The same for α = 0.01.</p>
+  __T_PM01__
+  <figure class="diag"><div class="diagwrap">__F_PM__</div>
+    <figcaption class="read">PD against PFA on the test markets for each target (number of test events in brackets).</figcaption></figure>
+  <p class="cap">PD at α = 0.05 in sports markets and in all other markets (DeepQCD / gradient boosting; events in brackets).</p>
+  __T_PMG__
+</section>
+
+<section class="exp" id="s7">
+  <h2><span class="num">7</span>Market making with the alarms</h2>
+  __R_TEXT__
+  __T_REPLAY__
+  <figure class="diag"><div class="diagwrap">__F_REPLAY__</div>
+    <figcaption class="read">P&amp;L of each quoting strategy on the test markets, 5-minute markouts, each alarm on for 2% of the quiet decision minutes of the calibration markets (share of volume filled in brackets; 95% interval over markets).</figcaption></figure>
+</section>
+
+<section class="exp" id="s8">
+  <h2><span class="num">8</span>What holds up</h2>
+  __END_TEXT__
+  <p>Code: <a href="__GH__bank_data.py">bank_data.py</a>, <a href="__GH__bank_final.py">bank_final.py</a>, <a href="__GH__pm_final.py">pm_final.py</a>, <a href="__GH__pm_replay.py">pm_replay.py</a>, <a href="__GH__usecases_common.py">usecases_common.py</a>; runs in <a href="__GH__runs/run_final.sh">runs/run_final.sh</a>; notes in <a href="__GH__notes/final.md">notes/final.md</a>.</p>
+</section>
+
+</div>
