@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=2.0",
     "matplotlib>=3.9",
     "lightgbm>=4.7.0",
+    "pyarrow>=26.0.0",
 ]
 
 [dependency-groups]

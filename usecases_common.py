@@ -43,9 +43,9 @@ def wl_cusum(xs_tr, ys_tr, X, K):
     return np.c_[np.full((len(zz), K), -np.inf), window_dec_stat_streams(zz[:, K:], zz[:, :K], mu)]
 
 
-def logistic_step(xs_tr, ys_tr, X, iters=60, max_rows=2_000_000, seed=0):
+def logistic_fit(xs_tr, ys_tr, iters=60, max_rows=2_000_000, seed=0):
     """A learned per-step scorer without memory: logistic regression of the label on the current step's features
-    (IRLS on up to 2 million training steps). Inputs normalized. Returns scores (n, L)."""
+    (IRLS on up to 2 million training steps). Inputs normalized. Returns the weights (last one the intercept)."""
     Z, y = xs_tr.reshape(-1, xs_tr.shape[2]).astype(np.float64), ys_tr.ravel().astype(np.float64)
     if len(Z) > max_rows:
         k = np.random.default_rng(seed).choice(len(Z), max_rows, replace=False)
@@ -58,7 +58,16 @@ def logistic_step(xs_tr, ys_tr, X, iters=60, max_rows=2_000_000, seed=0):
         w -= step
         if np.abs(step).max() < 1e-7:
             break
+    return w
+
+
+def logistic_score(w, X):
     return (X.reshape(-1, X.shape[2]) @ w[:-1] + w[-1]).reshape(X.shape[:2])
+
+
+def logistic_step(xs_tr, ys_tr, X, iters=60, max_rows=2_000_000, seed=0):
+    """logistic_fit, then the scores (n, L) of X."""
+    return logistic_score(logistic_fit(xs_tr, ys_tr, iters, max_rows, seed), X)
 
 
 def lagged(A, lags=5, wins=(10, 30)):
@@ -78,10 +87,20 @@ def lagged(A, lags=5, wins=(10, 30)):
     return np.concatenate(parts, 2)
 
 
-def gbm_lags(xs_tr, ys_tr, X, lags=5, wins=(10, 30), max_rows=2_000_000, seed=0, chunk=500):
+def lagged_last(A, lags=5, wins=(10, 30)):
+    """lagged(A, lags, wins)[:, -1] without the other steps: the inputs at the last step of each window (streaming)."""
+    n, L, P = A.shape
+    parts = [A[:, -1]] + [A[:, -1 - k] if k < L else np.zeros((n, P), A.dtype) for k in range(1, lags + 1)]
+    for w in wins:
+        tail = A[:, max(0, L - w):]
+        parts += [tail.astype(np.float64).sum(1).astype(np.float32) / min(L, w), tail.max(1)]
+    return np.concatenate(parts, 1)
+
+
+def gbm_fit(xs_tr, ys_tr, lags=5, wins=(10, 30), max_rows=2_000_000, seed=0, chunk=500, rounds=2000):
     """A strong learner with a fixed look-back instead of memory: gradient-boosted trees (LightGBM) on the lagged inputs,
     trained per step on the training windows (up to max_rows steps; a seventh of the windows for early stopping, as for
-    DeepQCD). Inputs normalized. Returns raw scores (n, L)."""
+    DeepQCD). Inputs normalized. Returns the booster."""
     import lightgbm as lgb
     rng = np.random.default_rng(seed)
     perm = rng.permutation(len(xs_tr))
@@ -99,14 +118,24 @@ def gbm_lags(xs_tr, ys_tr, X, lags=5, wins=(10, 30), max_rows=2_000_000, seed=0,
     (Ft, yt), (Fv, yv) = rows(perm[nv:]), rows(perm[:nv])
     params = dict(objective='binary', learning_rate=0.05, num_leaves=63, min_data_in_leaf=200, feature_fraction=0.8,
                   bagging_fraction=0.8, bagging_freq=1, lambda_l2=1.0, seed=seed, verbose=-1)
-    bst = lgb.train(params, lgb.Dataset(Ft, yt), 2000, valid_sets=[lgb.Dataset(Fv, yv)],
+    bst = lgb.train(params, lgb.Dataset(Ft, yt), rounds, valid_sets=[lgb.Dataset(Fv, yv)],
                     callbacks=[lgb.early_stopping(50, verbose=False)])
     print(f'  gradient boosting: {len(yt)} training steps, {bst.best_iteration} trees', flush=True)
+    return bst
+
+
+def gbm_score(bst, X, lags=5, wins=(10, 30), chunk=500):
+    """Raw scores (n, L) of X under a booster from gbm_fit (same lags and wins)."""
     out = np.empty(X.shape[:2])
     for s in range(0, len(X), chunk):
         f = lagged(X[s:s + chunk], lags, wins)
         out[s:s + chunk] = bst.predict(f.reshape(-1, f.shape[2]), raw_score=True).reshape(f.shape[:2])
     return out
+
+
+def gbm_lags(xs_tr, ys_tr, X, lags=5, wins=(10, 30), max_rows=2_000_000, seed=0, chunk=500):
+    """gbm_fit, then the scores (n, L) of X."""
+    return gbm_score(gbm_fit(xs_tr, ys_tr, lags, wins, max_rows, seed, chunk), X, lags, wins, chunk)
 
 
 def add_detector(path, name, o):
