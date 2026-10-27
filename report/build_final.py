@@ -215,8 +215,8 @@ def fig_replay(R, key='0.02_300'):
     sx = lambda v: left + (v - lo) / (hi - lo) * (W - left - 30)
     H = 16 + rh * len(names) + 46
     o = ''
-    step = max(1, round((hi - lo) / 8))
-    for v in range(lo, hi + 1, step):
+    step = next(st for st in (1, 2, 5, 10, 20, 50, 100) if (hi - lo) / st <= 10)
+    for v in range(math.ceil(lo / step) * step, hi + 1, step):
         o += f'<line x1="{sx(v)}" y1="8" x2="{sx(v)}" y2="{14 + rh * len(names)}" stroke="currentColor" stroke-opacity="{0.5 if v == 0 else 0.1}"/>'
         o += text(sx(v), 30 + rh * len(names), f'{v:+d}' if v else '0', 10, 'middle', op=0.8)
     for k, n in enumerate(names):
@@ -225,7 +225,7 @@ def fig_replay(R, key='0.02_300'):
         col = '#00704F' if v >= 0 else '#B2182B'
         o += f'<rect x="{min(sx(0), sx(v))}" y="{y}" width="{abs(sx(v) - sx(0))}" height="{rh - 9}" fill="{col}" fill-opacity="0.8"/>'
         o += f'<line x1="{sx(a)}" y1="{y + (rh - 9) / 2}" x2="{sx(b)}" y2="{y + (rh - 9) / 2}" stroke="currentColor" stroke-width="1.4"/>'
-        o += text(left - 8, y + 12, f'{n} ({100 * res[n]["share_filled"]:.0f}%)', 10.5, 'end')
+        o += text(left - 8, y + 12, f'{label(n)} ({100 * res[n]["share_filled"]:.0f}%)', 10.5, 'end')
     o += text((left + W) / 2, 46 + rh * len(names), 'P&L, cents per $100 of all traded volume (95% interval over test markets)', 10.5, 'middle', op=0.85)
     return svg(W, H, o, 'Market-making replay: P&L by strategy with bootstrap intervals')
 
@@ -335,12 +335,20 @@ def tab_groups_pm(P, a='0.05'):
     return table(['Target', 'sports markets: DeepQCD / GB', 'other markets: DeepQCD / GB'], rows, cls='wraptab')
 
 
+def label(n):
+    return n.replace('informed_wallets alarm', 'informed alarm, wallet features')
+
+
 def tab_replay(R):
     rows = []
     a, b = R['results']['0.02_300'], R['results']['0.02_1800']
     for n in a:
-        rows.append([n, f'{100 * a[n]["share_filled"]:.0f}%', ci(a[n]['pnl_per_100usd'], *a[n]['ci']), ci(b[n]['pnl_per_100usd'], *b[n]['ci'])])
-    return table(['Strategy', 'volume filled', 'P&L, 5-minute markout', 'P&L, 30-minute markout'], rows, cls='wraptab')
+        d = a[n]['vs_always_ci']
+        diff = '—' if n == 'always quote' else f'{a[n]["pnl_per_100usd"] - a["always quote"]["pnl_per_100usd"]:+.2f} <span class="note">[{d[0]:+.2f}, {d[1]:+.2f}]</span>'
+        rows.append([label(n), f'{100 * a[n]["share_filled"]:.0f}%', ci(a[n]['pnl_per_100usd'], *a[n]['ci']), diff,
+                     ci(b[n]['pnl_per_100usd'], *b[n]['ci'])])
+    return table(['Strategy', 'volume filled', 'P&amp;L, 5-minute markout', 'against always quoting', 'P&amp;L, 30-minute markout'], rows,
+                 cls='wraptab')
 
 
 def main():
@@ -367,9 +375,8 @@ def main():
                     '__T_PMG__': tab_groups_pm(P)})
     if R:
         rep.update({'__F_REPLAY__': fig_replay(R), '__T_REPLAY__': tab_replay(R)})
-    tp = os.path.join(HERE, 'final_text.json')
-    if os.path.exists(tp):
-        rep.update({f'__{k}__': v for k, v in json.load(open(tp)).items()})
+    from final_text import TEXT                         # report/final_text.py: the prose, keyed by placeholder
+    rep.update({f'__{k}__': v for k, v in TEXT.items()})
     html = open(os.path.join(HERE, 'final_template.html')).read()
     for k, v in rep.items():
         html = html.replace(k, v)
