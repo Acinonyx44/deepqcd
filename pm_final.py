@@ -331,7 +331,7 @@ def main():
         mdl.eval()
         models.append(mdl)
         print(f'  DeepQCD seed {seed} trained ({time.time() - t0:.0f} s)', flush=True)
-    bst = uc.gbm_fit(xs_n, ys, lags=5, wins=(10, 30), rounds=4000)
+    bst = uc.gbm_fit(xs_n, ys, lags=5, wins=(10, 30), rounds=300 if QUICK else 4000, max_rows=300_000 if QUICK else 2_000_000)
     w_lr = uc.logistic_fit(xs_n, ys)
     z, mu = projection([x[y == 0] for x, y in zip(xs_n, ys) if (y == 0).any()], [x[y == 1] for x, y in zip(xs_n, ys) if (y == 1).any()])
     F = {f: i for i, f in enumerate(FEATURES)}
