@@ -279,6 +279,29 @@ def tab_stream(B, R='5'):
                   'DeepQCD − GB'], rows, cls='wraptab')
 
 
+def at_rate(curve, R):
+    fa, det = curve['fa'], curve['det']
+    ok = [d for f, d in zip(fa, det) if f <= R]
+    return max(ok) if ok else 0.0
+
+
+def tab_stream_equal(B, rates=(5, 20)):
+    """Detection read off each detector's test curve at the same realized false-alert rate (no calibration drift)."""
+    rows = []
+    dets = [('DeepQCD', 'DeepQCD'), (GB, 'gradient boosting'), (LR, 'logistic'), ('WL-CUSUM', 'WL-CUSUM')]
+    for k, nm in BANKS:
+        if k not in B or 'streaming' not in B[k]:
+            continue
+        S = B[k]['streaming']['detectors']
+        r = [nm]
+        for R in rates:
+            vals = [at_rate(S[d]['curve'], R) for d, _ in dets]
+            r += [f'<b>{v:.2f}</b>' if j == 0 else f'{v:.2f}' for j, v in enumerate(vals)]
+        rows.append(r)
+    head = ['Dataset'] + [f'{lab}, ≤ {R}' for R in rates for _, lab in dets]
+    return table(head, rows, cls='wraptab')
+
+
 def tab_pm(P, a):
     rows = []
     for k, nm in TARGETS:
@@ -336,7 +359,7 @@ def main():
                     '__T_W05__': tab_windows(B, '0.05')})
         if any('streaming' in v for v in B.values()):
             rep.update({'__F_STREAM__': fig_stream(B), '__T_S5__': tab_stream(B, '5'), '__T_S20__': tab_stream(B, '20'),
-                        '__F_KINDS__': fig_kinds(B)})
+                        '__T_SEQ__': tab_stream_equal(B), '__F_KINDS__': fig_kinds(B)})
     if C:
         rep['__F_LEARN__'] = fig_learning(C)
     if P:
