@@ -46,7 +46,7 @@ OUT = os.path.join(ROOT, 'runs', 'quick' if QUICK else '', 'bank')
 SEEDS = (0,) if QUICK else (0, 1, 2, 3, 4)
 EPOCHS = 2 if QUICK else 20
 ALPHAS = (0.01, 0.05, 0.1)
-TARGETS = (1, 5, 20)                       # false alert-days per 1,000 active entity-days
+TARGETS = (0.5, 1, 2, 5, 10, 20, 50)       # false alert-days per 1,000 active entity-days
 B = 200 if QUICK else 1000
 AML_P = dict(pre=15, maxch=10, slack=1, warm=3, wl_k=5, gap=None, wins=(5, 15), n_norm=20000, n_no=8000, unit='account')
 CARD_P = dict(pre=30, maxch=30, slack=1, warm=5, wl_k=5, gap=20, wins=(5, 15), n_norm=25000, n_no=8000, unit='card')
@@ -401,6 +401,7 @@ def streaming(d, cfg, ent_of, within, e_ent, ea, espan, per, ek, norm, detect_la
     fl_r = flag[rows]
     usd_f = np.where(fl_r, usd[rows], 0.0)
     out = {}
+    arrays = {'kw': kw, 'kper': kper, 'test': test, 'kind': ek[e_id]}        # saved for later re-analysis
     for k in names:
         sc = S[k]
         M = np.maximum.reduceat(np.where(sid >= 0, -np.inf, sc), kstart)
@@ -434,10 +435,18 @@ def streaming(d, cfg, ent_of, within, e_ent, ea, espan, per, ek, norm, detect_la
                                     'detected_ci': np.quantile(bs, [0.025, 0.975]).tolist(),
                                     'money_after_alert': float(np.mean(share)),
                                     'flagged_before_alert': float(np.median(before)) if before else None, '_det': det}
-        fin = np.r_[M[mt][np.isfinite(M[mt])], Et[np.isfinite(Et)]]
-        hs = np.unique(np.quantile(fin, np.linspace(0, 1, 300))) if len(fin) else np.array([np.inf])
+        # the operating curve on the test period, with thresholds placed at false-alert rates from 0.1 to 1,000 per
+        # 1,000 (log grid), so the low rates that matter are resolved
         Mt, wt = M[mt], kw[mt]
+        st_ = np.argsort(-Mt)
+        cwt = np.cumsum(wt[st_])
+        hs = []
+        for R in np.logspace(-1, 3, 161):
+            j = int(np.searchsorted(cwt, R / 1000 * wt.sum(), side='right'))
+            hs.append(float(np.nextafter(Mt[st_[j]], np.inf)) if j < len(st_) else float(Mt[st_[-1]]))
+        hs = np.unique(hs)
         o['curve'] = {'fa': [float((wt * (Mt >= h)).sum() / wt.sum() * 1000) for h in hs], 'det': [float((Et >= h).mean()) for h in hs]}
+        arrays[f'{k}|M'], arrays[f'{k}|E'] = M.astype(np.float32), E.astype(np.float32)
         ekt = ek[e_id[test]]
         o['by_kind'] = {str(g): [float((Et[ekt == g] >= th[5]).mean()), int((ekt == g).sum())] for g in np.unique(ekt)}
         out[k] = o
@@ -457,6 +466,7 @@ def streaming(d, cfg, ent_of, within, e_ent, ea, espan, per, ek, norm, detect_la
               f'detected {t5["detected"]:.3f} [{t5["detected_ci"][0]:.2f}, {t5["detected_ci"][1]:.2f}], money after alert '
               f'{t5["money_after_alert"]:.2f}', flush=True)
     res['detectors'] = out
+    np.savez_compressed(os.path.join(OUT, f'{DATA}_stream.npz'), **arrays)
     return res
 
 
