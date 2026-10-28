@@ -169,22 +169,38 @@ def fig_kinds(B, key='aml-hi-medium'):
 
 
 def fig_learning(C):
-    pans = []
-    for k, nm in BANKS:
-        if k not in C:
-            continue
-        fr = C[k]['fractions']
-        xs = [fr[f]['n_events'] for f in sorted(fr, key=float)]
-        cv = []
-        for d, c in ((GB, COLS[GB]), ('DeepQCD', COL['deep'])):
-            for a, da in (('0.01', None), ('0.05', '6 4')):
-                cv.append((xs, [fr[f][d][a]['pd'] for f in sorted(fr, key=float)], c, 2.2, da))
-        lo = 10 ** math.floor(math.log10(min(xs)))
-        pans.append((nm, cv, dict(xr=(lo, lo * 100), xticks=(lo, lo * 10, lo * 100), alpha=None, xlabel='training windows with an event',
-                                  ylabel='PD on test (calibrated)')))
+    """PD (calibrated) against training windows with an event: straight lines between the three training sizes."""
+    keys = [(k, nm) for k, nm in BANKS if k in C]
+    pw, ph, W = 405, 270, 820
     items = [('DeepQCD, α = 0.01', COL['deep'], None, 2.2), ('DeepQCD, α = 0.05', COL['deep'], '6 4', 2.2),
              ('gradient boosting, α = 0.01', COLS[GB], None, 2.2), ('gradient boosting, α = 0.05', COLS[GB], '6 4', 2.2)]
-    return grid(pans, 2, items, pw=405, ph=260, label='Learning curves: PD against the number of training events')
+    o, top = legend(items, W)
+    for j, (k, nm) in enumerate(keys):
+        fr = C[k]['fractions']
+        fs = sorted(fr, key=float)
+        xs = [fr[f]['n_events'] for f in fs]
+        lo = 10 ** math.floor(math.log10(min(xs)))
+        x0, y0 = 5 + j * pw, top
+        L, R, T, Bt = x0 + 46, x0 + pw - 14, y0 + 22, y0 + ph - 36
+        lx = lambda v: L + (math.log10(v) - math.log10(lo)) / 2 * (R - L)
+        ly = lambda v: Bt - v * (Bt - T)
+        o += text(x0 + 6, y0 + 14, nm, 12, weight=600)
+        o += f'<rect x="{L}" y="{T}" width="{R - L}" height="{Bt - T}" fill="none" stroke="currentColor"/>'
+        for v in (lo, lo * 10, lo * 100):
+            o += f'<line x1="{lx(v)}" y1="{T}" x2="{lx(v)}" y2="{Bt}" stroke="currentColor" stroke-opacity="0.1"/>'
+            o += text(lx(v), Bt + 14, f'{v:,}', 10, 'middle', op=0.8)
+        for v in (0, 0.25, 0.5, 0.75, 1):
+            o += f'<line x1="{L}" y1="{ly(v)}" x2="{R}" y2="{ly(v)}" stroke="currentColor" stroke-opacity="0.1"/>'
+            o += text(L - 5, ly(v) + 3.5, f'{v:g}', 10, 'end', op=0.8)
+        o += text((L + R) / 2, Bt + 30, 'training windows with an event (log scale)', 10.5, 'middle', op=0.85)
+        o += f'<text x="{x0 + 11}" y="{(T + Bt) / 2}" transform="rotate(-90 {x0 + 11} {(T + Bt) / 2})" text-anchor="middle" font-size="10.5" fill-opacity="0.85">PD on test (calibrated)</text>'
+        for d, c in ((GB, COLS[GB]), ('DeepQCD', COL['deep'])):
+            for a, da in (('0.01', None), ('0.05', '6 4')):
+                pts = [(lx(x), ly(fr[f][d][a]['pd'])) for x, f in zip(xs, fs)]
+                dd = f' stroke-dasharray="{da}"' if da else ''
+                o += f'<polyline points="{" ".join(f"{px:.1f},{py:.1f}" for px, py in pts)}" fill="none" stroke="{c}" stroke-width="2.2"{dd}/>'
+                o += ''.join(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.4" fill="{c}"/>' for px, py in pts)
+    return svg(W, top + ph + 4, o, 'Learning curves: PD against the number of training windows with an event')
 
 
 def fig_pm_curves(P):
@@ -240,7 +256,7 @@ def tab_data(B, P, R):
         ep = c['episodes']
         rows.append([nm, f'{c["steps"]:,}', f'{c["entities"]:,}', f'{ep["train"]:,} / {ep["calibration"]:,} / {ep["test"]:,}',
                      f'{c["cal_events"]:,} / {c["test_events"]:,}', f'{s.get("rows", 0):,}'])
-    return table(['Dataset', 'transactions (steps)', 'accounts / cards', 'episodes: train / cal. / test', 'streams: cal. / test',
+    return table(['Dataset', 'steps (account or card transactions)', 'accounts / cards', 'episodes: train / cal. / test', 'streams: cal. / test',
                   'streaming steps scored'], rows, cls='wraptab')
 
 
@@ -285,10 +301,10 @@ def at_rate(curve, R):
     return max(ok) if ok else 0.0
 
 
-def tab_stream_equal(B, rates=(5, 20)):
+def tab_stream_equal(B, rates=(0.5, 1, 5, 20)):
     """Detection read off each detector's test curve at the same realized false-alert rate (no calibration drift)."""
     rows = []
-    dets = [('DeepQCD', 'DeepQCD'), (GB, 'gradient boosting'), (LR, 'logistic'), ('WL-CUSUM', 'WL-CUSUM')]
+    dets = [('DeepQCD', 'DeepQCD'), (GB, 'GB')]
     for k, nm in BANKS:
         if k not in B or 'streaming' not in B[k]:
             continue
@@ -296,9 +312,9 @@ def tab_stream_equal(B, rates=(5, 20)):
         r = [nm]
         for R in rates:
             vals = [at_rate(S[d]['curve'], R) for d, _ in dets]
-            r += [f'<b>{v:.2f}</b>' if j == 0 else f'{v:.2f}' for j, v in enumerate(vals)]
+            r += [f'{v:.2f}' for v in vals]
         rows.append(r)
-    head = ['Dataset'] + [f'{lab}, ≤ {R}' for R in rates for _, lab in dets]
+    head = ['Dataset'] + [f'{lab}, ≤ {R:g}' for R in rates for _, lab in dets]
     return table(head, rows, cls='wraptab')
 
 

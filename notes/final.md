@@ -63,7 +63,25 @@ PD on test, the DeepQCD ensemble against gradient boosting; realized PFA in brac
 
 ## Results: banks (streaming)
 
-STREAMING_TABLE
+Share of episodes alerted, read off the test curve at the same realized number of false alert-days per 1,000 active
+entity-days (DeepQCD / gradient boosting).
+
+| Data | 0.5 | 1 | 2 | 5 | 20 | 50 |
+|---|---|---|---|---|---|---|
+| AMLworld HI-Small | 0.13 / 0.05 | 0.17 / 0.10 | 0.22 / 0.18 | 0.32 / 0.31 | 0.69 / 0.62 | 0.74 / 0.75 |
+| AMLworld LI-Small | 0.05 / 0.04 | 0.08 / 0.07 | 0.11 / 0.11 | 0.20 / 0.20 | 0.50 / 0.49 | 0.58 / 0.63 |
+| AMLworld HI-Medium | 0.30 / 0.28 | 0.35 / 0.36 | 0.40 / 0.43 | 0.48 / 0.51 | 0.69 / 0.68 | 0.78 / 0.76 |
+| TabFormer cards | 0.68 / 0.66 | 0.75 / 0.73 | 0.80 / 0.77 | 0.85 / 0.82 | 0.92 / 0.91 | 0.95 / 0.95 |
+| Sparkov cards | 0.99 / 0.99 | 0.99 / 0.99 | 0.99 / 0.99 | 0.99 / 0.99 | 1.00 / 1.00 | 1.00 / 1.00 |
+
+- **HI-Small.** DeepQCD catches more at the low alert rates a bank can staff, up to 2.4 times as much at 0.5 per
+  1,000.
+- **LI-Small and HI-Medium.** The two are level within 0.05. The HI-Medium window-test lead does not carry over to
+  whole histories.
+- **TabFormer.** DeepQCD is 0.00-0.03 ahead at every rate.
+- **Drift.** With thresholds set for 5 per 1,000, DeepQCD realized 7.8 (HI-Small) and 7.2 (LI-Small) on test, against
+  4.9 and 5.5 for gradient boosting.
+- **Timing.** The median alert comes at the first laundering transfer; on TabFormer, after one fraudulent transaction.
 
 ## Results: learning curves
 
