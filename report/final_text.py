@@ -30,4 +30,32 @@ R_TEXT = '''
   </p>
 '''
 
-TEXT = {'PM_TEXT': PM_TEXT, 'R_TEXT': R_TEXT}
+DATA_TEXT = '''
+  <p>Five public, synthetic bank data sets.</p>
+  <ul class="tight">
+    <li><b>Laundering: IBM AMLworld</b> (Altman et al., NeurIPS 2023), three banks. HI-Small has 5.1 million transfers between 515,000 accounts; LI-Small has 6.9 million transfers with ten times fewer laundering transfers; HI-Medium has 31.9 million transfers between 2.08 million accounts. An account's stream has one step per transfer it sends or receives (15 features), and the change runs from its first laundering transfer to one after its last.</li>
+    <li><b>Card fraud: IBM TabFormer</b> (24.4 million transactions of 6,139 cards, 1991–2020) and the <b>Sparkov</b> simulator (1.05 million transactions of 965 cards). A card's stream has one step per transaction, and the change is a fraud burst.</li>
+    <li><b>Periods.</b> AMLworld trains on the days before 6 September (HI-Medium: 10 September), calibrates on the next two days (three) and tests on the last three days (four) that carry normal traffic; the days after those, which hold only the ends of laundering schemes, are left out. TabFormer trains before 2014, calibrates on 2014–15 and tests on 2016–20. Sparkov trains to August 2012, calibrates on September–October and tests from November 2012 to March 2013.</li>
+  </ul>
+'''
+
+W_TEXT = '''
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>Laundering: DeepQCD wins at the strict level.</b> At α = 0.01 the ensemble finds 0.55 against 0.48 for gradient boosting on HI-Small, 0.34 against 0.30 on LI-Small and 0.38 against 0.26 on HI-Medium; every interval of the difference excludes zero. At α = 0.05 the two are within 0.05 of each other. The logistic model, the CUSUM and the rules are far behind.</li>
+      <li><b>Card fraud: gradient boosting is level or slightly ahead.</b> On TabFormer it finds 0.73 against 0.69 at α = 0.01 (difference −0.03, interval −0.05 to −0.02). On Sparkov every learner finds 0.99: the simulator's fraud is too plain to separate them.</li>
+      <li><b>The thresholds carry over.</b> The PFA realized on test stays near the target: 0.006–0.017 at α = 0.01. The one miss is DeepQCD on TabFormer at α = 0.05, whose threshold turns out too strict (PFA 0.018); on the oracle curve the two learners tie there (0.79 and 0.78).</li>
+      <li><b>The ensemble matters.</b> Single seeds spread by up to 0.13 at α = 0.01 (TabFormer 0.61–0.74, LI-Small 0.24–0.36); the ensemble is at or above the average seed on every data set.</li>
+    </ul>
+  </p>
+'''
+
+L_TEXT = '''
+  <p>DeepQCD (two seeds) and gradient boosting retrained on 10%, 30% and 100% of the training events, with thresholds again from the calibration period.</p>
+  <ul class="tight">
+    <li><b>HI-Medium.</b> DeepQCD's PD at α = 0.01 is already 0.35 with 10% of the events and stays there (0.34 with all of them), while gradient boosting falls from 0.32 to 0.26 as the data grow. The lead on the largest bank comes from gradient boosting losing precision at the top of its scores, not from the network gaining with more labels. At α = 0.05 the two are level at every size (0.52–0.54).</li>
+    <li><b>TabFormer.</b> Both improve with more fraud (DeepQCD 0.49, 0.69, 0.72 at α = 0.01; gradient boosting 0.51, 0.66, 0.73) and stay level.</li>
+  </ul>
+'''
+
+TEXT = {'PM_TEXT': PM_TEXT, 'R_TEXT': R_TEXT, 'DATA_TEXT': DATA_TEXT, 'W_TEXT': W_TEXT, 'L_TEXT': L_TEXT}
