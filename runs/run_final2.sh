@@ -3,7 +3,7 @@
 # Waits for runs/run_final.sh to finish; keeps the first-pass results in runs/bank/v1.
 cd "$(dirname "$0")/.."
 while ! grep -q "^=== all done" runs/final_queue.log 2>/dev/null; do sleep 60; done
-export QCD_THREADS=4 OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4
+export QCD_THREADS=3 OMP_NUM_THREADS=3 OPENBLAS_NUM_THREADS=3 MKL_NUM_THREADS=3     # as in the first pass, so the window results repeat
 mkdir -p runs/bank/v1
 for d in aml-hi-small aml-li-small sparkov tabformer aml-hi-medium; do
     [ -f "runs/bank/v1/$d.json" ] || cp "runs/bank/$d.json" "runs/bank/v1/$d.json"
