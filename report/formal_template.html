@@ -1,0 +1,318 @@
+<title>DeepQCD in Finance</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:wght@400;500;600&family=Source+Code+Pro:wght@400;500&display=swap">
+__STYLE__
+<style>
+.diagwrap svg { min-width: 680px; }
+.feat td { white-space: normal; vertical-align: top; }
+.wraptab td, .wraptab th { white-space: normal; }
+.wraptab td:first-child { min-width: 110px; }
+.sumtab td:nth-child(1) { min-width: 150px; }
+.sumtab td:nth-child(2) { min-width: 150px; }
+.sumtab td:nth-child(4), .sumtab th:nth-child(4), .sumtab td:nth-child(5), .sumtab th:nth-child(5) { text-align: left; }
+.sumtab td:nth-child(5) { min-width: 230px; }
+.sumtab td:nth-child(6) { min-width: 100px; }
+.feat td:nth-child(1) { min-width: 120px; }
+.feat td:nth-child(2) { white-space: nowrap; }
+.feat td:nth-child(4) { min-width: 320px; }
+.feat td:nth-child(5) { min-width: 190px; }
+h3 { margin-top: 6px; }
+.verdict { font-family: var(--sans); font-size: 14px; }
+.res td:nth-child(3), .res td:nth-child(4), .res td:nth-child(8) { white-space: nowrap; }
+.pmres td:nth-child(7) { min-width: 150px; }
+</style>
+
+<div class="wrap">
+
+<section class="exp" id="s0">
+  <h2>Summary</h2>
+  <p>We reproduced DeepQCD (Kurt, Zheng, Yılmaz, Wang, <i>J. Franklin Inst.</i> 2024) from the authors' code and asked where in finance it beats the detectors practitioners use. This page reports the five use cases studied in most depth (laundering, a toxic-flow alarm for crypto market makers, card fraud, short squeezes and card default) and the prediction-market studies on Polymarket. In every study the network and its training are the paper's (LSTM(16) → Dense(10) → Dense(1), cross-entropy, 20 epochs; <span class="mono">original_qcd.py</span>), and the test is the paper's transient protocol on native streams: an alarm before the event is a false alarm, a first alarm during it is a detection, and each detector's threshold gives the largest PD with PFA ≤ α (Eq. 11).</p>
+  <p>Laundering, card fraud and Polymarket were then scaled up, to 32 million transfers between 2 million accounts and to all 24 million trades of 3,000 markets, and tested more strictly. Every threshold is set on a calibration period and applied unchanged to a later test period. DeepQCD is a five-seed ensemble. Every PD has a 95% bootstrap interval. The main competitor is gradient boosting on the current step and its recent history.</p>
+  <ul class="tight">
+    <li><b>DeepQCD wins</b> where the event is a change in behaviour that builds over a run of steps, thousands of events are labelled, and false alarms must be rare. That is laundering at PFA 0.01 on all three banks (+0.04 to +0.13 in PD over gradient boosting, every interval above zero), the crypto toxic-flow alarm (0.46 against 0.29), and Polymarket metaorders and churn.</li>
+    <li><b>It ties</b> where a short look-back or one statistic is enough: card fraud (gradient boosting level or up to 0.04 ahead), short squeezes (the price) and card default (the payment status).</li>
+    <li><b>Nothing works</b> on Polymarket informed flow or news-driven price jumps. No alarm yet changes a market maker's P&amp;L by a measurable amount, although perfect knowledge of the flow would.</li>
+  </ul>
+  <p class="cap">The five use cases and the prediction-market studies at a glance. Thresholds are "calibrated" (set on a separate calibration period, five-seed ensemble) or "Eq. 11" (set on the test streams as in the paper, three seeds). GB is gradient boosting.</p>
+  <div class="tablewrap"><table class="wraptab sumtab">
+    <tr><th>Use case (user)</th><th>Data</th><th class="num">Test events</th><th>Thresholds</th><th>DeepQCD vs best other</th><th>Verdict</th></tr>
+    <tr><td>Laundering (bank AML teams)</td><td>IBM AMLworld, three banks, 5.1–31.9M transfers</td><td class="num">967 / 828 / 6,372</td><td>calibrated</td><td>PFA 0.01: 0.55 vs 0.47, 0.34 vs 0.30, 0.38 vs 0.26 (GB); PFA 0.05: within 0.04</td><td><span class="y">win</span> at 0.01, tie at 0.05</td></tr>
+    <tr><td>Toxic-flow alarm (market makers)</td><td>Binance ETHUSDT perpetual, 112 days of trades</td><td class="num">360</td><td>Eq. 11</td><td>PFA 0.05: 0.46 vs 0.29 (GB), 0.21 (rule); 2.6 vs 1.8 bps avoided per run</td><td><span class="y">win</span></td></tr>
+    <tr><td>Card fraud (card issuers)</td><td>IBM TabFormer, 24.4M transactions; Sparkov, 1.05M</td><td class="num">1,677 / 163</td><td>calibrated</td><td>PFA 0.01: 0.69 vs 0.73 (GB), 0.35 (logistic); Sparkov 0.99 vs 0.99</td><td>tie with GB; beats the rest</td></tr>
+    <tr><td>Short-squeeze warning (hedge funds)</td><td>Yahoo prices and FINRA short volume, 1,398 stocks</td><td class="num">260</td><td>Eq. 11</td><td>PFA 0.05: 0.76 vs 0.75 (CUSUM)</td><td>tie</td></tr>
+    <tr><td>Card default (credit risk)</td><td>UCI, 30,000 clients × 6 months</td><td class="num">2,019</td><td>Eq. 11</td><td>PFA 0.05: 0.31 vs 0.30 (CUSUM); all 0.62–0.64 at PFA 0.2</td><td>tie</td></tr>
+    <tr class="mid"><td>Polymarket metaorders (market makers, venues)</td><td>Polymarket, 3,000 markets, 24.0M trades</td><td class="num">1,891</td><td>calibrated</td><td>PFA 0.05: 0.43 vs 0.38 (GB)</td><td><span class="y">win</span></td></tr>
+    <tr><td>Polymarket churn</td><td>as above</td><td class="num">563</td><td>calibrated</td><td>PFA 0.01: 0.44 vs 0.37 (GB); PFA 0.05: 0.46 vs 0.46</td><td><span class="y">win</span> at 0.01</td></tr>
+    <tr><td>Polymarket informed flow</td><td>as above</td><td class="num">1,487</td><td>calibrated</td><td>PFA 0.05: 0.17 vs 0.19 (GB); wallet features add nothing</td><td>no detector works</td></tr>
+    <tr><td>Polymarket price jumps</td><td>as above</td><td class="num">826</td><td>calibrated</td><td>PFA 0.05: 0.14 vs 0.15 (GB); sports markets 0.31, others 0.01</td><td>sports only</td></tr>
+    <tr><td>Market making with the alarms</td><td>748 test markets</td><td class="num">—</td><td>calibrated</td><td>no alarm changes P&amp;L measurably; knowing the true metaorders would add 15¢ per $100</td><td>no edge yet</td></tr>
+  </table></div>
+  <figure class="diag">
+    <div class="diagwrap">__F_DOTS__</div>
+    <figcaption class="read">DeepQCD (filled) against the strongest other detector (open) at the stated false-alarm level, with the paired difference in PD on the right: a 95% bootstrap interval where thresholds are calibrated, the point difference where they follow Eq. 11. Green: DeepQCD ahead (interval above zero, or more than two standard errors); red: the other detector ahead; grey: tie.</figcaption>
+  </figure>
+</section>
+
+<section class="exp" id="s1">
+  <h2><span class="num">1</span>Problem, detectors and protocol</h2>
+  <p><b>Model.</b> A stream x[1], x[2], … is drawn from f₀ until τ₁, from f₁ on [τ₁, τ₂), and from f₀ again: a transient change (paper §5.3). The label bits y[n] are 1 exactly on [τ₁, τ₂). A detector turns x[n] into a statistic d[n] and alarms at Γ, the first n with d[n] ≥ h. Each stream ends in a false alarm (Γ &lt; τ₁), a detection (τ₁ ≤ Γ &lt; τ₂) or a miss (no alarm before τ₂), so PFA + PD + PMD = 1. Sweeping h traces a PD–PFA curve. We report PD mainly at PFA ≤ 0.01 and 0.05, the levels at which banks, card issuers and trading desks operate.</p>
+  <p><b>From records to x[n] and y[n].</b> Every study turns raw records into the same objects. Records are split by the entity watched (an account, a card, a market, a stock, a client) and aggregated on a clock: one step per transfer, transaction, second, minute, day or month. Each step is mapped to the features the business already computes (Appendix A) and standardized with normal training data. The labels come from a rule applied in hindsight, so every event has a known τ₁ and τ₂. Test streams are native: the entity's real history before the event, then the event, never spliced.</p>
+  <figure class="diag"><div class="diagwrap">__F_PIPE__</div>
+    <figcaption class="read">The data pipeline shared by all studies. Each section shows its contents in a diagram of the same form.</figcaption></figure>
+  <p><b>Detectors.</b> Five detectors are compared at the same false-alarm level, each with its own threshold.</p>
+  <ul class="tight">
+    <li><b>DeepQCD:</b> the paper's network, trained offline to reproduce y[n] from x[n].</li>
+    <li><b>The window-limited CUSUM</b> (<span class="mono">window_dec_stat</span>): the log-likelihood ratio of the last K steps with a floor at 0, applied to z = w′(x − m₀)/√(w′C₀w) with w = C₀⁻¹(m₁ − m₀), the Gaussian log-likelihood direction fitted on training data.</li>
+    <li><b>A logistic model</b> on the current step's features: the same information, learned, without memory.</li>
+    <li><b>Gradient-boosted trees</b> (LightGBM) on the current step, the five steps before it, and the mean and maximum of each feature over two recent windows: a strong learner with a fixed look-back instead of memory.</li>
+    <li><b>The rules of the trade:</b> what each business runs today (Appendix A).</li>
+  </ul>
+  <figure class="diag"><div class="diagwrap">__F_DET__</div>
+    <figcaption class="read">The paper's two detectors as systems. DeepQCD is a recurrent filter: an LSTM with its state fed back through z⁻¹, then two dense layers. The window-limited CUSUM accumulates the log-likelihood ratio of the last K samples.</figcaption></figure>
+  <p><b>Two protocols.</b></p>
+  <ul class="tight">
+    <li><b>The paper's.</b> Each detector's threshold is the one with the largest PD on the test streams subject to PFA ≤ α (Eq. 11), and DeepQCD is trained with three seeds. Used for the toxic-flow alarm, short squeezes and card default.</li>
+    <li><b>Calibrated.</b> Training before p₀, calibration [p₀, p₁), test [p₁, p₂). Every threshold is chosen on the calibration period (Eq. 11 there) and applied unchanged to the test period, which reports the realized PFA next to PD. DeepQCD is the mean output of five seeds. 1,000 bootstrap resamples of the event and normal streams give 95% intervals for PD and for the paired difference with gradient boosting. Used for laundering, card fraud and Polymarket. The bank alarms are also run as a bank would run them, on every account or card at every transaction.</li>
+  </ul>
+  <figure class="diag"><div class="diagwrap">__F_PROTOCOL__</div>
+    <figcaption class="read">The calibrated protocol in time, and the streaming evaluation of the bank alarms. An entity-day is active if the account or card transacts that day; an alert-day is false if no flagged span of the entity covers the transaction that raised it.</figcaption></figure>
+  <h3>Reading the numbers</h3>
+  <ul class="tight">
+    <li><b>PD at PFA α.</b> "PD 0.46 at PFA 0.05" in the crypto study means this: with the threshold set so that 5 of every 100 quiet windows raise a false alarm, the alarm catches 46 of every 100 price runs while they are still running.</li>
+    <li><b>Curves.</b> Each point of a PD–PFA curve is one threshold, strict on the left. At any PFA the higher curve is the better detector. Curves fall at the right end, where a permissive threshold rings before the event starts.</li>
+    <li><b>Precision.</b> With n test events, a PD near p has a standard error of √(p(1 − p)/n): about 0.03 for n = 260 and 0.012 for n = 1,680. Under the calibrated protocol the bootstrap interval is quoted instead.</li>
+  </ul>
+</section>
+
+<div class="part">Part A · Five use cases</div>
+
+<section class="exp" id="s2">
+  <h2><span class="num">2</span>Laundering at banks</h2>
+  <p>A bank's anti-money-laundering team watches every account and can review only a few alerts a day, so the alarm must ring when an account starts laundering and rarely otherwise. IBM AMLworld (Altman et al., NeurIPS 2023) simulates banking systems with laundering inserted in known patterns (fan-in, cycle, scatter-gather, …) and also outside them. We use three of its banks:</p>
+  <ul class="tight">
+    <li><b>HI-Small:</b> 5.1 million transfers between 515,000 accounts.</li>
+    <li><b>LI-Small:</b> 6.9 million transfers, with ten times less laundering.</li>
+    <li><b>HI-Medium:</b> 31.9 million transfers between 2.08 million accounts.</li>
+  </ul>
+  <p>An account's stream has one step per transfer it sends or receives, with 15 features. The change runs from its first laundering transfer to one transfer after its last. A test stream is 15 normal transfers of the account followed by its laundering; false alarms are counted on those 15 transfers and on windows of accounts that never launder. Training, calibration and test are consecutive days. HI-Small and LI-Small train on the days to 5 September 2022, calibrate on 6–7 September and test on 8–10 September; HI-Medium trains to 9 September, calibrates on 10–12 and tests on 13–16. The later days hold only the ends of laundering schemes and no normal traffic, so they are left out.</p>
+  <figure class="diag"><div class="diagwrap">__C_AML__</div></figure>
+  <p class="cap">The three banks. A step is one transfer of one account; an episode is one account's laundering.</p>
+  __T_AML_DATA__
+  <p class="cap">PD on the test streams with thresholds from the calibration period (95% bootstrap interval; realized PFA in brackets; the logistic model and the CUSUM realized 0.007–0.017 at α = 0.01 and 0.039–0.070 at α = 0.05). The last column is the paired difference between DeepQCD and gradient boosting.</p>
+  __T_AML__
+  <figure class="diag"><div class="diagwrap">__F_AML_CURVES__</div>
+    <figcaption class="read">PD against PFA on the test streams of the three banks, over every threshold; the dashed line marks α = 0.01. At strict PFA DeepQCD lies above every other detector on all three banks. The rule "ACH with a new counterparty" is yes-or-no, so its curve is a single step: it detects nothing below its own false-alarm rate.</figcaption></figure>
+  <p class="verdict"><b>Reading: win at the strict level.</b>
+    <ul class="tight">
+      <li><b>PFA 0.01.</b> The ensemble finds 0.55 of laundering accounts against 0.47 for gradient boosting on HI-Small, 0.34 against 0.30 on LI-Small and 0.38 against 0.26 on HI-Medium, and every interval of the difference excludes zero. The logistic model, the CUSUM and the rules find at most 0.32.</li>
+      <li><b>PFA 0.05.</b> DeepQCD and gradient boosting are within 0.04 of each other. On the two small banks the one-line rule "ACH with a new counterparty" is as good (0.59 and 0.43): in HI-Small 87% of laundering transfers are ACH.</li>
+      <li><b>The thresholds carry over.</b> The realized PFA on the test days is 0.011–0.017 for DeepQCD at α = 0.01.</li>
+      <li><b>The ensemble matters.</b> Single seeds spread by up to 0.12 at α = 0.01 (LI-Small 0.24–0.36); the ensemble is at or above the average seed on every bank.</li>
+    </ul>
+  </p>
+
+  <h3>Streaming: every account, every transfer</h3>
+  <p>A bank runs the alarm on every account at every transfer and counts alerts per day. Each detector scores every transfer of the calibration and test days from the account's last 16 transfers (on HI-Medium, all laundering accounts and a fifth of the others, weighted back). An alert-day is false if no laundering span of the account covers it. The bank's budget is a number of false alert-days per 1,000 active account-days.</p>
+  <p class="cap">Share of laundering accounts alerted while laundering, read off each detector's test curve at the same realized number of false alert-days per 1,000 active account-days.</p>
+  __T_AML_SEQ__
+  <figure class="diag"><div class="diagwrap">__F_AML_STREAM__</div>
+    <figcaption class="read">Streaming on the test days: share of laundering accounts alerted against false alert-days per 1,000 active account-days (log scale).</figcaption></figure>
+  <p class="cap">With the threshold set on the calibration days for 5 false alert-days per 1,000: the realized rate on the test days, the share of laundering accounts alerted (95% interval), and the share of their laundered money that moved at or after the first alert.</p>
+  __T_AML_S5__
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>HI-Small: DeepQCD catches more at the alert rates a bank can staff.</b> It alerts on 0.13 of laundering accounts against 0.05 for gradient boosting at 0.5 false alert-days per 1,000, and on 0.17 against 0.10 at 1 per 1,000. The two meet at about 5 per 1,000.</li>
+      <li><b>LI-Small and HI-Medium: level.</b> The two learners stay within 0.05 of each other from 0.5 to 50 per 1,000. On HI-Medium the lead of the window test does not carry over to whole account histories.</li>
+      <li><b>Alerts come early.</b> When an account is caught, the median alert comes at its first laundering transfer.</li>
+      <li><b>Alert volume drifts.</b> Set for 5 per 1,000 on the calibration days, DeepQCD let through 7.8 on the HI-Small test days and 7.2 on LI-Small, against 4.9 and 5.5 for gradient boosting.</li>
+    </ul>
+  </p>
+
+  <h3>What it misses, and whether more labels help</h3>
+  <figure class="diag"><div class="diagwrap">__F_PATTERNS__</div>
+    <figcaption class="read">Streaming on HI-Medium, threshold for 5 false alert-days per 1,000: share of laundering accounts alerted while active, by the pattern they take part in (accounts in brackets). Laundering inside the listed patterns is caught at about 0.8–0.9 by both learners. Accounts whose laundering is in no listed pattern ("unlisted", half of them) are almost never caught.</figcaption></figure>
+  <figure class="diag"><div class="diagwrap">__F_LEARN__</div>
+    <figcaption class="read">PD on test (calibrated thresholds) against the number of training windows with an event, for DeepQCD (two seeds) and gradient boosting trained on 10%, 30% and 100% of the training events. Left: laundering on HI-Medium. Right: card fraud on TabFormer (§4).</figcaption></figure>
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>Misses.</b> Laundering outside the listed patterns (half the accounts) and laundering that does not use ACH transfers are missed by every detector.</li>
+      <li><b>More labels do not explain the lead.</b> On HI-Medium DeepQCD's PD at α = 0.01 is 0.35 with 10% of the training events and 0.34 with all of them, while gradient boosting falls from 0.32 to 0.26 as the data grow. At α = 0.05 the two are level at every size.</li>
+      <li><b>A second simulator.</b> On IBM AMLSim (one step per day; banks 1–4 train, banks 5–6 test; Eq. 11) DeepQCD and gradient boosting tie (0.82 and 0.83 at PFA 0.05), well above the best rules (0.70) and the CUSUM (0.12).</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s3">
+  <h2><span class="num">3</span>Toxic-flow alarm for crypto market makers</h2>
+  <p>A market maker quoting ETH loses when the price runs: whoever trades just before and during the run knows something. An alarm that rings early in the run lets it pull the quotes on that side. Every trade of the Binance ETHUSDT perpetual from 1 July to 20 October 2026 is aggregated into one-second steps with ten features. A fast run is a swing of at least 15 bps completed within 60 seconds, found by a zigzag with a 5 bps reversal; there are about 80 a day. Runs from July to September train (10,776). The 360 runs of 1–20 October that follow five quiet minutes test, against 6,000 quiet windows. Thresholds follow the paper (Eq. 11 on the test streams), with three seeds.</p>
+  <figure class="diag"><div class="diagwrap">__C_TOXIC__</div></figure>
+  <p class="cap">PD on the 360 test runs (the three seeds in brackets).</p>
+  __T_TOXIC__
+  <figure class="diag"><div class="diagwrap">__F_TOXIC__</div>
+    <figcaption class="read">PD against PFA for fast runs. DeepQCD (green, three seeds) lies well above gradient boosting, the logistic model, the CUSUM and the best rule across the whole range, and the seeds agree.</figcaption></figure>
+  <p class="verdict"><b>Reading: win.</b>
+    <ul class="tight">
+      <li><b>Detection.</b> DeepQCD catches 0.46 of runs at PFA 0.05, against 0.29 for gradient boosting and 0.21 for the best rule, and 0.34 against 0.19 and 0.12 at PFA 0.01. Gradient boosting sees the last five seconds and 10- and 30-second summaries, so the gain comes from the memory and not only from a nonlinear learner. It is largest on the smaller 15–20 bps runs (0.43 against 0.24 for gradient boosting), which build over tens of seconds.</li>
+      <li><b>Value.</b> DeepQCD rings later (median 22 s into a run of about 35 s) but catches so many more runs that it avoids 2.6–2.7 bps of adverse move per run, against 1.8 for gradient boosting and 1.6 for the best rule.</li>
+      <li><b>Data.</b> With 40 days instead of 112 the gain was smaller (0.35 against 0.20).</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s4">
+  <h2><span class="num">4</span>Card fraud</h2>
+  <p>A card issuer wants to stop a compromised card after as few fraudulent transactions as possible, at a false-alarm level its customers will accept. Two data sets:</p>
+  <ul class="tight">
+    <li><b>IBM TabFormer</b> (Padhi et al., ICASSP 2021): 24.4 million transactions of 6,139 cards from 1991 to 2020, 15 features per transaction. It trains before 2014, calibrates on 2014–15 and tests on 2016–20.</li>
+    <li><b>The Sparkov simulator:</b> 1.05 million transactions of 965 cards, 12 features per transaction. The public copy rounds card numbers, so a card is identified by its holder. It trains to August 2012, calibrates on September–October and tests from November 2012 to March 2013.</li>
+  </ul>
+  <p>A card's stream has one step per transaction. The change is a fraud burst: fraudulent transactions at most 20 transactions apart. A test stream is 30 clean transactions of the card followed by the burst.</p>
+  <figure class="diag"><div class="diagwrap">__C_FRAUD__</div></figure>
+  <p class="cap">The two card data sets.</p>
+  __T_CARD_DATA__
+  <p class="cap">PD on the test streams with thresholds from the calibration period (95% bootstrap interval; realized PFA in brackets; the logistic model and the CUSUM realized 0.008–0.015 at α = 0.01 and 0.041–0.059 at α = 0.05).</p>
+  __T_CARD__
+  <figure class="diag"><div class="diagwrap">__F_CARD_CURVES__</div>
+    <figcaption class="read">PD against PFA on the test streams; the dashed line marks α = 0.01. On TabFormer, DeepQCD and gradient boosting lie together, about 0.35 above the logistic model at strict PFA. On Sparkov every learner is near 1.</figcaption></figure>
+  <h3>Streaming: every card, every transaction</h3>
+  <p class="cap">Share of fraud bursts alerted while active, at the same realized number of false alert-days per 1,000 active card-days (TabFormer: half of the clean cards, weighted back).</p>
+  __T_CARD_SEQ__
+  <figure class="diag"><div class="diagwrap">__F_CARD_STREAM__</div>
+    <figcaption class="read">Streaming on the test period: share of fraud bursts alerted against false alert-days per 1,000 active card-days (log scale).</figcaption></figure>
+  <p class="cap">With the threshold set in the calibration period for 5 false alert-days per 1,000: the realized rate on test, the share of bursts alerted (95% interval), and the share of the fraud money at or after the first alert.</p>
+  __T_CARD_S5__
+  <p class="verdict"><b>Reading: tie with gradient boosting; win over the logistic model, the CUSUM and the rules.</b>
+    <ul class="tight">
+      <li><b>Window test.</b> Gradient boosting finds 0.73 against 0.69 at α = 0.01 (difference −0.03, interval −0.05 to −0.02) and 0.78 against 0.74 at α = 0.05. At α = 0.05 DeepQCD's threshold turned out too strict (realized PFA 0.018); on the test curve the two tie there (0.79 and 0.78).</li>
+      <li><b>History matters.</b> The logistic model finds 0.35, the CUSUM 0.15 and the rules at most 0.08 at α = 0.01. An online purchase is normal for one card and alarming for another, and only the card's own history tells which.</li>
+      <li><b>Streaming.</b> DeepQCD is slightly ahead: 0.85 of bursts against 0.82 at 5 false alert-days per 1,000 (difference +0.02, interval +0.01 to +0.04). The median alert comes after one fraudulent transaction, and 67% of the fraud money in the test bursts came at or after an alert.</li>
+      <li><b>More labels.</b> Both learners improve with more fraud (DeepQCD 0.49, 0.69 and 0.72 at α = 0.01 with 10%, 30% and 100% of the training bursts; gradient boosting 0.51, 0.66 and 0.73) and stay level.</li>
+      <li><b>Sparkov.</b> Every learner finds 0.99: the simulator's fraud is too plain to separate them.</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s5">
+  <h2><span class="num">5</span>Short-squeeze warning for hedge funds</h2>
+  <p>A short seller wants warning when a heavily shorted stock starts a squeeze, while there is still time to cover. The universe is 1,398 US stocks whose median FINRA short-volume share is at least 40%, with daily Yahoo prices from 2021 to 2026 and ten features per day. A squeeze is a rally of at least 50% within 10 days on at least three times normal volume. Rallies before 2025 train (968); the 260 from 2025 on test. Thresholds follow the paper (Eq. 11), with three seeds.</p>
+  <figure class="diag"><div class="diagwrap">__C_SQUEEZE__</div></figure>
+  <p class="cap">PD on the 260 test rallies (the three seeds in brackets).</p>
+  __T_SQUEEZE__
+  <figure class="diag"><div class="diagwrap">__F_SQUEEZE__</div>
+    <figcaption class="read">PD against PFA for squeezes. DeepQCD and the CUSUM coincide; the 2-day-return rule and the logistic model are slightly lower.</figcaption></figure>
+  <p class="verdict"><b>Reading: tie.</b>
+    <ul class="tight">
+      <li><b>Detection.</b> A squeeze is mostly one statistic, the price going up, which a short window over returns already sees. At PFA 0.05 DeepQCD finds 0.76, the CUSUM 0.75 and the 2-day-return rule 0.69; at PFA 0.01, 0.70 against 0.67.</li>
+      <li><b>Value.</b> Alarms come about 5 days into a 93% rally with about 17% of it left, and DeepQCD and the CUSUM each avoid about 13% per rally. The volume-spike rule catches fewer rallies (0.41) but earlier, and avoids the most (17.6% per rally): for a short seller, speed beats coverage.</li>
+      <li>Gradient boosting was not run on this study.</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s6">
+  <h2><span class="num">6</span>Card default</h2>
+  <p>A lender wants to flag clients heading for default. The UCI data (Yeh and Lien 2009) hold 30,000 credit-card clients in Taiwan with six monthly steps (April to September 2005) of eight features, the repayment status included, as the bank sees them; 22% default the following month. A defaulter's stream is labelled 1 in every month (the paper's Bayesian setting), and an alarm in any month flags the client. 70% of the clients train and 30% test (2,019 defaulters). Thresholds follow the paper (Eq. 11), with three seeds.</p>
+  <figure class="diag"><div class="diagwrap">__C_CREDIT__</div></figure>
+  <p class="cap">PD on the test clients (the three seeds in brackets).</p>
+  __T_CREDIT__
+  <figure class="diag"><div class="diagwrap">__F_CREDIT__</div>
+    <figcaption class="read">PD against PFA for card default. DeepQCD, the CUSUM and the logistic model lie on top of each other, and at PFA 0.2 the one-line "months late now" rule reaches them.</figcaption></figure>
+  <p class="verdict"><b>Reading: tie.</b> At PFA 0.05 DeepQCD finds 0.31, the CUSUM 0.30 and the logistic model 0.25. At PFA 0.2, the usual credit operating point, every detector is at 0.62–0.64 and "months late now" is as good as any. Six monthly steps give memory nothing to work with, and the current status carries the signal. Loan-level histories (Freddie Mac, Fannie Mae) would be the stronger test; they need a registration.</p>
+</section>
+
+<div class="part">Part B · Prediction markets</div>
+
+<section class="exp" id="s7">
+  <h2><span class="num">7</span>Polymarket: four kinds of order flow</h2>
+  <p>A market maker, or the venue, wants to know from the anonymous flow alone when one trader is working a large order, trading back and forth, or trading on information, and when the price is about to jump. Polymarket settles on chain, so every trade carries its wallet. These episodes can therefore be labelled exactly from public data, while the detectors see only anonymous one-minute flow, as they would on Kalshi or a futures exchange.</p>
+  <p>The data are every trade of 3,000 two-outcome markets with $1M–$30M volume that closed between January 2025 and October 2026: 24.0 million trades by 1.54 million wallets. Markets are split by closing date: 1,800 train (to April 2026), 450 calibrate (April–June 2026) and 750 test (June–October 2026). The clock is one minute, with nine anonymous features (trades, signed and gross flow, largest trade, one-sidedness, repeated sizes, regularity, price change, activity).</p>
+  <ul class="tight">
+    <li><b>Metaorder.</b> One wallet works a large order in one direction: at least 5 trades and $2,000, trades at most 10 minutes apart.</li>
+    <li><b>Churn.</b> One wallet trades back and forth: at least 6 trades and 4 changes of side, net at most 20% of gross.</li>
+    <li><b>Informed flow.</b> A wallet episode of at least $2,000 in one direction after which the price is at least 10 cents further its way 24 hours later (the market's final value if it closed first). 22.6% of the 306,304 such episodes qualify, against 19.0% that moved 10 cents the other way, so the label is mostly luck with a small edge. A second detector also sees four features the venue can compute from wallets: flow from wallets first seen in the last week, the track record of the wallets trading, flow from proven wallets, and how concentrated the volume is.</li>
+    <li><b>Price jump.</b> The hour before the price moves at least 15 cents within 30 minutes (from a level between 5 and 95 cents) and is still 10 cents away two hours later.</li>
+  </ul>
+  <figure class="diag"><div class="diagwrap">__C_PM__</div></figure>
+  <p class="cap">PD on the test markets with thresholds from the calibration markets, α = 0.05 (95% bootstrap interval; realized PFA in brackets; the logistic model and the CUSUM realized 0.018–0.051).</p>
+  __T_PM05__
+  <p class="cap">The same for α = 0.01 (the logistic model and the CUSUM realized 0.006–0.015).</p>
+  __T_PM01__
+  <figure class="diag"><div class="diagwrap">__F_PM__</div>
+    <figcaption class="read">PD against PFA on the test markets for each target (test events in brackets); the dashed line marks α = 0.05.</figcaption></figure>
+  <p class="cap">PD at α = 0.05 in sports markets and in all other markets (DeepQCD / gradient boosting; events in brackets).</p>
+  __T_PMG__
+  <p class="verdict"><b>Reading.</b>
+    <ul class="tight">
+      <li><b>Metaorders: win at scale.</b> With 19,421 training metaorders, the ensemble finds 0.43 at α = 0.05 against 0.38 for gradient boosting (difference +0.05, interval +0.03 to +0.07) and 0.32 for the CUSUM. On 750 markets the two had tied. The ensemble beats each of its five seeds (0.38–0.41), and the lead is largest for $5k–20k orders (0.48 against 0.39).</li>
+      <li><b>Churn: win at the strict level.</b> 0.44 against 0.37 at α = 0.01 (difference +0.07, interval +0.04 to +0.11); both 0.46 at α = 0.05.</li>
+      <li><b>Informed flow: no detector works.</b> At α = 0.05 the detectors find 0.15–0.20, three to four times their false-alarm rate, and gradient boosting is slightly ahead. Wallet features add nothing that the one-line rule "proven-wallet flow over 30 minutes" (0.19) does not. Only large episodes stand out: of those of $20,000 or more, DeepQCD finds 0.48 against 0.31.</li>
+      <li><b>Price jumps: only in sports.</b> In sports markets DeepQCD finds 0.31 of jumps an hour ahead; elsewhere 0.01. Jumps on news give no warning in the flow. An earlier study of 64 news events in 2,083 markets (34 for training) found the same: DeepQCD 0.40 against 0.43 for a 24-hour price-rise rule, and buying at its alarms earned less than buying at random.</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s8">
+  <h2><span class="num">8</span>Market making with the alarms</h2>
+  <p>We act as a market maker that takes the other side of every taker trade in the 748 test markets while it quotes, scored by the markout 5 minutes (and 30 minutes) later. Each alarm pulls the side being hit (both sides for churn and jumps) while it is on. Its threshold makes it ring in 2% of the quiet decision minutes of the 448 calibration markets. Decisions at minute m use data up to m − 1. The oracles pull the hit side exactly during true metaorders or true informed episodes.</p>
+  <p class="cap">P&amp;L in cents per $100 of all traded volume, 95% interval over test markets; "against always quoting" is the paired difference.</p>
+  __T_REPLAY__
+  <figure class="diag"><div class="diagwrap">__F_REPLAY__</div>
+    <figcaption class="read">P&amp;L of each quoting strategy on the test markets at 5-minute markouts (share of volume filled in brackets; 95% interval over markets).</figcaption></figure>
+  <p class="verdict"><b>Reading: no edge yet.</b>
+    <ul class="tight">
+      <li><b>Quoting against every taker roughly breaks even</b> at scale: +5.0 cents per $100 of volume at 5 minutes (interval −3.3 to +13.8). The loss seen on an earlier 298-market sample (−12.7) does not hold up.</li>
+      <li><b>No alarm changes P&amp;L by an amount distinguishable from zero.</b> Every paired difference with always quoting has an interval that includes zero. With alarms on in 10% of quiet minutes instead of 2%, stepping back on jump alarms costs money.</li>
+      <li><b>The ceilings are real.</b> Pulling the hit side exactly during metaorders would add 15 cents per $100 (interval 6 to 25), and during informed episodes 47 (40 to 54). The detectors find too few of these episodes (0.43 of metaorders and about 0.2 of informed episodes at 5% false alarms) to collect it.</li>
+      <li><b>Heavy tails.</b> Markouts near resolution move by tens of cents, so P&amp;L per market is noisy.</li>
+    </ul>
+  </p>
+</section>
+
+<section class="exp" id="s9">
+  <h2><span class="num">9</span>What works and what does not</h2>
+  <div class="tablewrap"><table class="wraptab">
+    <tr><th>Condition</th><th>In the wins (laundering at PFA 0.01, crypto runs, metaorders, churn)</th><th>In the ties and failures</th></tr>
+    <tr><td>Labelled events</td><td>thousands (laundering 2,521–20,689; crypto runs 10,776; metaorders 19,421)</td><td>necessary but not enough: card fraud (2,535), squeezes (968) and credit (about 4,600) tie; earlier studies with 7–155 events lost</td></tr>
+    <tr><td>How the event shows</td><td>a change in behaviour over a run of steps: a dormant account dealing with new counterparties; many small aggressive trades building a run; one wallet working an order or churning</td><td>one statistic (a price rise for squeezes, the payment status for credit), or one unusual transaction (card fraud), which a short look-back already sees</td></tr>
+    <tr><td>False-alarm level</td><td>strict (PFA 0.01)</td><td>at PFA 0.05 gradient boosting catches up, and on two banks a yes-or-no rule</td></tr>
+    <tr><td>History per entity</td><td>long sequences (an account's transfers, a market's seconds or minutes)</td><td>six monthly steps (credit)</td></tr>
+    <tr><td>Signal in the flow</td><td>present</td><td>informed flow and news jumps: every detector finds at most 0.2 at PFA 0.05, and wallet features add nothing</td></tr>
+  </table></div>
+  <ul class="tight">
+    <li><b>Memory pays where the event builds over tens of steps.</b> Gradient boosting with five lags and two window summaries closes most of the gap between DeepQCD and a memoryless model. The LSTM keeps a clear lead on crypto runs (0.46 against 0.29) and on laundering at the strict level (+0.04 to +0.13).</li>
+    <li><b>Detection is not profit.</b> On Polymarket and in squeezes an alarm pays only if it rings while the move is still ahead, and markets price most of what can be seen. The replay's oracles show that the value is there for a better detector.</li>
+    <li><b>For deployment.</b> Average several seeds (single seeds spread by up to 0.13 in PD at α = 0.01). Set thresholds on a separate period. Watch the alert volume, which drifted more for DeepQCD than for gradient boosting.</li>
+    <li><b>Where to use it.</b> Where labels come free: card issuers (chargebacks), banks (case files), market makers (markouts and price runs), and venues with public wallets. There the network replaces several hand-written rules with one score, at the false-alarm levels those teams use.</li>
+  </ul>
+</section>
+
+<section class="exp" id="s10">
+  <h2><span class="num">10</span>Limits and next steps</h2>
+  <ul class="tight">
+    <li><b>Synthetic banks.</b> AMLworld, AMLSim, TabFormer and Sparkov are simulators. Binance, Yahoo and FINRA, UCI and Polymarket are real. Real bank or issuer data would be the next test.</li>
+    <li><b>Two protocols.</b> The toxic-flow alarm, short squeezes and card default use the paper's thresholds on the test streams with three seeds. The calibrated protocol (separate calibration period, five-seed ensemble, bootstrap intervals) has been applied to laundering, card fraud and Polymarket. Gradient boosting was not run on squeezes and card default.</li>
+    <li><b>Hindsight labels.</b> Crypto runs are labelled from prices; a market maker's own markouts would give labels that fit its quotes exactly.</li>
+    <li><b>Streaming.</b> An alert counts as false whenever no flagged span covers it, including alerts on an account before its first laundering transfer.</li>
+    <li><b>Replay.</b> The market-making replay ignores queue position and liquidity rewards, and its P&amp;L is heavy-tailed near resolution.</li>
+    <li><b>Next.</b> The calibrated protocol for the toxic-flow alarm, squeezes and credit; the toxic-flow alarm on more symbols and venues; loan-level credit histories; a metaorder detector trained on Polymarket's wallet labels and run on anonymous venues.</li>
+  </ul>
+  <p>Code: <a href="__GH__original_qcd.py">original_qcd.py</a> (ports, with tests), <a href="__GH__usecases_common.py">usecases_common.py</a>, <a href="__GH__bank_data.py">bank_data.py</a>, <a href="__GH__bank_final.py">bank_final.py</a>, <a href="__GH__usecase_toxic.py">usecase_toxic.py</a>, <a href="__GH__usecase_squeeze.py">usecase_squeeze.py</a>, <a href="__GH__usecase_credit.py">usecase_credit.py</a>, <a href="__GH__aml_qcd.py">aml_qcd.py</a>, <a href="__GH__pm_final.py">pm_final.py</a>, <a href="__GH__pm_replay.py">pm_replay.py</a>; notes in <a href="__GH__notes/formal.md">notes/formal.md</a>, <a href="__GH__notes/final.md">notes/final.md</a> and <a href="__GH__notes/usecases.md">notes/usecases.md</a>.</p>
+</section>
+
+<section class="exp" id="sA">
+  <h2><span class="num">A</span>Features and rules</h2>
+  <p>p is the number of features at each time step (the paper's p). The features are those each business already computes from its records; nothing is learned before the network. All are standardized with normal training data before they reach DeepQCD, the logistic model and the CUSUM projection z. Counts, volumes and amounts enter as log(1 + ·), and signed flows as sign · log(1 + |·|). The rules use the raw features. "Combined" scales each rule by its 99th percentile on normal training data and takes the maximum, the way a bank runs several scenarios at once.</p>
+  <div class="tablewrap"><table class="feat">
+    <tr><th>Study</th><th>Step</th><th>p</th><th>Features x[n]</th><th>Compared with</th></tr>
+    <tr><td>§2 AMLworld</td><td>transfer</td><td>15</td><td>outgoing; incoming; log USD amount; payment format (ACH, cheque, credit card, cash, wire, bitcoin; one-hot); cross-currency; cross-bank; self-transfer; new counterparty; log hours since the last transfer; the counterparty's number of distinct counterparties so far.</td><td>ACH with a new counterparty; amount above usual; new counterparties in the last 5; hub contact; cross-currency; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§2 AMLSim</td><td>day</td><td>9</td><td>transfers in; transfers out; amount in; amount out; new senders; new receivers; distinct counterparties over 7 days; pass-through (min of 3-day in and out amounts); largest 7-day degree of today's counterparties (hub contact).</td><td>Pass-through; counterparties 7 d; velocity 7 d; hub contact; new counterparties 3 d; dormant reactivated; dormant + new counterparty; all rules combined; window-limited CUSUM; gradient boosting</td></tr>
+    <tr><td>§3 Crypto toxic flow</td><td>second</td><td>10</td><td>trades; signed taker notional; gross notional; largest trade; price levels traded; 1-s return; signed share of the last 5 s of volume; trades in the last 10 s; 30-s realized volatility; 5-s return.</td><td>Price move, 5 s; signed flow, 5 s; trades, 10 s; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§4 TabFormer</td><td>transaction</td><td>15</td><td>log amount; refund; online; chip; first time at this merchant, city, state or merchant category; foreign; error code; log hours since the last transaction; hour of day (sine, cosine); amount z-score against the card's own history; transactions in the last 24 h.</td><td>Online above usual amount; new state or country; new merchant above usual amount; errors; velocity 24 h; above usual amount; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§4 Sparkov</td><td>transaction</td><td>12</td><td>log amount; online; first time at this merchant; first time in this category; log distance from home; log hours since the last transaction; hour of day (sine, cosine); night; amount z-score against the card's own history; transactions in the last 24 h; risky category.</td><td>Above usual amount; night, above usual amount; online, above usual amount; risky category, above usual amount; velocity 24 h; far from home; window-limited CUSUM; logistic; gradient boosting</td></tr>
+    <tr><td>§5 Short squeezes</td><td>day</td><td>10</td><td>log return; log volume / 60-day median; FINRA short-volume share; its jump over the 20-day mean; high–low range; overnight gap; 5-day return; 20-day return; 20-day volatility; log distance below the 52-week high.</td><td>2-day return; volume spike; short-share jump; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§6 Card default</td><td>month</td><td>8</td><td>repayment status (months late); utilization (bill / limit); log bill; log payment; payment / previous bill; bill change; log credit limit; age.</td><td>Months late now; utilization; low payment; combined; window-limited CUSUM; logistic</td></tr>
+    <tr><td>§7–8 Polymarket</td><td>minute</td><td>9 (+4)</td><td>trades; signed net flow; gross volume; largest trade; one-sidedness of the last 5 minutes; share of trades in the last 10 minutes with a same-side, ±5% size match within 50 trades; regularity of trade gaps (CV, 10 minutes); price change; trades in the last 10 minutes. With wallet features (informed flow): flow from wallets first seen in the last week; the track record of the wallets trading; flow from proven wallets; concentration of volume.</td><td>Trades, last 10 min; flow, last 5 min; price move and flow, last 30 min (jumps); fresh- and proven-wallet flow, last 30 min (wallet features); window-limited CUSUM; logistic; gradient boosting</td></tr>
+  </table></div>
+</section>
+
+</div>
