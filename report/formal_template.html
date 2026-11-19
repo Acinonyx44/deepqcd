@@ -79,7 +79,7 @@ h3 { margin-top: 6px; }
   <h3>Reading the numbers</h3>
   <ul class="tight">
     <li><b>PD at PFA α.</b> "PD 0.46 at PFA 0.05" in the crypto study means this: with the threshold set so that 5 of every 100 quiet windows raise a false alarm, the alarm catches 46 of every 100 price runs while they are still running.</li>
-    <li><b>Curves.</b> Each point of a PD–PFA curve is one threshold, strict on the left. At any PFA the higher curve is the better detector. Curves fall at the right end, where a permissive threshold rings before the event starts.</li>
+    <li><b>Curves.</b> Each point of a PD–PFA curve is one threshold. As in the paper's Fig. 9, PFA runs on a log scale from 1 on the left to the strictest level on the right. At any PFA the higher curve is the better detector. Every curve starts at PD = 0 on the left, where a permissive threshold rings before the event starts, rises to a peak, and falls toward the right, where the threshold becomes too strict to ring in time.</li>
     <li><b>Precision.</b> With n test events, a PD near p has a standard error of √(p(1 − p)/n): about 0.03 for n = 260 and 0.012 for n = 1,680. Under the calibrated protocol the bootstrap interval is quoted instead.</li>
   </ul>
 </section>
@@ -101,7 +101,7 @@ h3 { margin-top: 6px; }
   <p class="cap">PD on the test streams with thresholds from the calibration period (95% bootstrap interval; realized PFA in brackets; the logistic model and the CUSUM realized 0.007–0.017 at α = 0.01 and 0.039–0.070 at α = 0.05). The last column is the paired difference between DeepQCD and gradient boosting.</p>
   __T_AML__
   <figure class="diag"><div class="diagwrap">__F_AML_CURVES__</div>
-    <figcaption class="read">PD against PFA on the test streams of the three banks, over every threshold; the dashed line marks α = 0.01. At strict PFA DeepQCD lies above every other detector on all three banks. The rule "ACH with a new counterparty" is yes-or-no, so its curve is a single step: it detects nothing below its own false-alarm rate.</figcaption></figure>
+    <figcaption class="read">PD against PFA on the test streams of the three banks, over every threshold, with PFA decreasing to the right as in the paper's Fig. 9; the dashed line marks α = 0.01. At strict PFA DeepQCD lies above every other detector on all three banks. The rule "ACH with a new counterparty" is yes-or-no, so its curve is a single step: it detects nothing below its own false-alarm rate.</figcaption></figure>
   <p class="verdict"><b>Reading: win at the strict level.</b>
     <ul class="tight">
       <li><b>PFA 0.01.</b> The ensemble finds 0.55 of laundering accounts against 0.47 for gradient boosting on HI-Small, 0.34 against 0.30 on LI-Small and 0.38 against 0.26 on HI-Medium, and every interval of the difference excludes zero. The logistic model, the CUSUM and the rules find at most 0.32.</li>
@@ -116,7 +116,7 @@ h3 { margin-top: 6px; }
   <p class="cap">Share of laundering accounts alerted while laundering, read off each detector's test curve at the same realized number of false alert-days per 1,000 active account-days.</p>
   __T_AML_SEQ__
   <figure class="diag"><div class="diagwrap">__F_AML_STREAM__</div>
-    <figcaption class="read">Streaming on the test days: share of laundering accounts alerted against false alert-days per 1,000 active account-days (log scale).</figcaption></figure>
+    <figcaption class="read">Streaming on the test days: share of laundering accounts alerted against false alert-days per 1,000 active account-days (log scale, stricter budgets to the right, as for PFA).</figcaption></figure>
   <p class="cap">With the threshold set on the calibration days for 5 false alert-days per 1,000: the realized rate on the test days, the share of laundering accounts alerted (95% interval), and the share of their laundered money that moved at or after the first alert.</p>
   __T_AML_S5__
   <p class="verdict"><b>Reading.</b>
@@ -178,7 +178,7 @@ h3 { margin-top: 6px; }
   <p class="cap">Share of fraud bursts alerted while active, at the same realized number of false alert-days per 1,000 active card-days (TabFormer: half of the clean cards, weighted back).</p>
   __T_CARD_SEQ__
   <figure class="diag"><div class="diagwrap">__F_CARD_STREAM__</div>
-    <figcaption class="read">Streaming on the test period: share of fraud bursts alerted against false alert-days per 1,000 active card-days (log scale).</figcaption></figure>
+    <figcaption class="read">Streaming on the test period: share of fraud bursts alerted against false alert-days per 1,000 active card-days (log scale, stricter budgets to the right).</figcaption></figure>
   <p class="cap">With the threshold set in the calibration period for 5 false alert-days per 1,000: the realized rate on test, the share of bursts alerted (95% interval), and the share of the fraud money at or after the first alert.</p>
   __T_CARD_S5__
   <p class="verdict"><b>Reading: tie with gradient boosting; win over the logistic model, the CUSUM and the rules.</b>
@@ -216,7 +216,7 @@ h3 { margin-top: 6px; }
   <p class="cap">PD on the test clients (the three seeds in brackets).</p>
   __T_CREDIT__
   <figure class="diag"><div class="diagwrap">__F_CREDIT__</div>
-    <figcaption class="read">PD against PFA for card default. DeepQCD, the CUSUM and the logistic model lie on top of each other, and at PFA 0.2 the one-line "months late now" rule reaches them.</figcaption></figure>
+    <figcaption class="read">PD against PFA for card default. DeepQCD, the CUSUM and the logistic model lie on top of each other, and at PFA 0.2 the one-line "months late now" rule reaches them. A defaulter's stream is labelled 1 from its first month, so it has no period before the change in which an alarm could come too early: PD keeps rising toward PFA = 1, and the curve shows only the right-hand part of the paper's shape.</figcaption></figure>
   <p class="verdict"><b>Reading: tie.</b> At PFA 0.05 DeepQCD finds 0.31, the CUSUM 0.30 and the logistic model 0.25. At PFA 0.2, the usual credit operating point, every detector is at 0.62–0.64 and "months late now" is as good as any. Six monthly steps give memory nothing to work with, and the current status carries the signal. Loan-level histories (Freddie Mac, Fannie Mae) would be the stronger test; they need a registration.</p>
 </section>
 

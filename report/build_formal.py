@@ -5,6 +5,7 @@ The run outputs behind these results are not in git; the figures and tables come
 pages and are kept in report/formal_src (report/extract_published.py made them).
 Run:  python report/build_formal.py"""
 import json
+import math
 import os
 import re
 import sys
@@ -24,6 +25,69 @@ LEARNERS = [('DeepQCD (ensemble)', COL['deep'], None, 2.4), ('gradient boosting'
 
 def fig(name):
     return open(os.path.join(SRC, name + '.svg')).read().strip()
+
+
+def paper_axes(s):
+    """The paper's Fig. 9 convention for a figure of curve panels on a log false-alarm axis: the axis runs from the
+    largest value on the left to the strictest on the right, with a dotted minor grid. Every panel is mirrored inside
+    its frame (curves, vertical grid lines, tick labels, the alpha marker), so the curves themselves are unchanged."""
+    frames = [tuple(map(float, f)) for f in re.findall(
+        r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="none" stroke="currentColor" stroke-width="1"/>', s)]
+    num = r'(-?[\d.]+)'
+    within = lambda x, L, R: L - 0.5 <= x <= R + 0.5
+
+    def panel_of(x, y):
+        return next(((L, T, L + w, T + h) for L, T, w, h in frames if within(x, L, L + w) and T - 1 <= y <= T + h + 20), None)
+
+    def poly(m):
+        p = [float(v) for v in re.split(r'[ ,]+', m.group(1).strip())]
+        f = panel_of(p[0], p[1])
+        if not f:
+            return m.group(0)
+        L, R = f[0], f[2]
+        pts = ' '.join(f'{L + R - x:.1f},{y:.1f}' for x, y in zip(p[0::2], p[1::2]))
+        return f'<polyline points="{pts}"'
+
+    def vline(m):
+        x, y1, y2 = float(m.group(1)), float(m.group(2)), float(m.group(4))
+        f = panel_of(x, y1)
+        if not f or float(m.group(3)) != x or y1 < f[1] - 1 or y2 > f[3] + 1:
+            return m.group(0)
+        X = f[0] + f[2] - x
+        return f'<line x1="{X:.2f}" y1="{m.group(2)}" x2="{X:.2f}" y2="{m.group(4)}"'
+
+    def label(m):
+        x, y = float(m.group(1)), float(m.group(2))
+        f = panel_of(x, y)
+        if not f or y < f[3]:
+            return m.group(0)
+        return f'<text x="{f[0] + f[2] - x:.2f}" y="{m.group(2)}" text-anchor="middle"'
+
+    def alpha(m):
+        x, y = float(m.group(1)), float(m.group(2))
+        f = panel_of(x, y)
+        return m.group(0) if not f else f'<text x="{f[0] + f[2] - (x - 3) + 3:.2f}" y="{m.group(2)}" text-anchor="start" font-size="9.5"'
+
+    ticks = re.findall(rf'<text x="{num}" y="{num}" text-anchor="middle" font-size="10" font-weight="400" fill-opacity="0.8">([\d.]+)</text>', s)
+    s = re.sub(r'<polyline points="([^"]+)"', poly, s)
+    s = re.sub(rf'<line x1="{num}" y1="{num}" x2="{num}" y2="{num}"', vline, s)
+    s = re.sub(rf'<text x="{num}" y="{num}" text-anchor="middle"(?= font-size="10" font-weight="400" fill-opacity="0.8">[\d.]+</text>)', label, s)
+    s = re.sub(rf'<text x="{num}" y="{num}" text-anchor="start" font-size="9.5"', alpha, s)
+    minor = ''
+    for L, T, w, h in frames:
+        vals = sorted({float(v) for x, y, v in ticks if within(float(x), L, L + w) and T + h < float(y) < T + h + 20})
+        lo, hi = math.log10(vals[0]), math.log10(vals[-1])
+        for k in range(int(lo), int(hi)):
+            for j in range(2, 10):
+                X = L + w - (math.log10(j * 10 ** k) - lo) / (hi - lo) * w
+                minor += (f'<line x1="{X:.1f}" y1="{T}" x2="{X:.1f}" y2="{T + h}" stroke="currentColor" stroke-opacity="0.16" '
+                          f'stroke-dasharray="1 2"/>')
+    if all(float(v) <= 1 for _, _, v in ticks):                     # a PFA axis: the paper's 10^k labels
+        sup = str.maketrans('-0123456789', '⁻⁰¹²³⁴⁵⁶⁷⁸⁹')
+        s = re.sub(r'(text-anchor="middle" font-size="10" font-weight="400" fill-opacity="0.8">)(1|0\.1|0\.01|0\.001)(</text>)',
+                   lambda m: m.group(1) + '10' + str(round(math.log10(float(m.group(2))))).translate(sup) + m.group(3), s)
+    head = re.match(r'<svg[^>]*>(?:<defs>.*?</defs>)?', s).group(0)
+    return head + minor + s[len(head):]
 
 
 def inside(el, x0, y0, w, h):
@@ -200,7 +264,7 @@ def main():
     style = re.search(r'<style>.*?</style>', tpl, re.S).group(0)
     det = re.findall(r'<svg viewBox="0 0 820 300".*?</svg>', tpl, re.S)
     assert len(det) == 1
-    bank_curves, bank_stream = fig('bank_curves'), fig('bank_stream')
+    bank_curves, bank_stream = paper_axes(fig('bank_curves')), paper_axes(fig('bank_stream'))
     narrow = lambda s: s.replace('<svg viewBox', '<svg style="max-width:560px;min-width:470px" viewBox', 1)
     eq_aml, s5_aml = stream_tables(AML)
     eq_card, s5_card = stream_tables(CARDS_DATA)
@@ -217,12 +281,12 @@ def main():
         '__F_CARD_STREAM__': narrow(crop(bank_stream, 0, 269, 550, 247, LEARNERS)),
         '__T_AML_SEQ__': eq_aml, '__T_AML_S5__': s5_aml, '__T_CARD_SEQ__': eq_card, '__T_CARD_S5__': s5_card,
         '__F_PATTERNS__': fig('aml_patterns'), '__F_LEARN__': fig('bank_learning'),
-        '__T_TOXIC__': detector_table('summary_toxic'), '__F_TOXIC__': fig('toxic_curves'),
-        '__T_SQUEEZE__': detector_table('summary_squeeze'), '__F_SQUEEZE__': fig('squeeze_curves'),
-        '__T_CREDIT__': detector_table('summary_credit'), '__F_CREDIT__': fig('credit_curves'),
+        '__T_TOXIC__': detector_table('summary_toxic'), '__F_TOXIC__': paper_axes(fig('toxic_curves')),
+        '__T_SQUEEZE__': detector_table('summary_squeeze'), '__F_SQUEEZE__': paper_axes(fig('squeeze_curves')),
+        '__T_CREDIT__': detector_table('summary_credit'), '__F_CREDIT__': paper_axes(fig('credit_curves')),
         '__T_PM05__': pm_table('final_pm05'), '__T_PM01__': pm_table('final_pm01'),
         '__T_PMG__': html_table(T['final_pm_sports'][0], T['final_pm_sports'][1:]),
-        '__F_PM__': fig('pm_curves'),
+        '__F_PM__': paper_axes(fig('pm_curves')),
         '__T_REPLAY__': html_table(T['final_replay'][0], T['final_replay'][1:], mid=(len(T['final_replay']) - 3,)),
         '__F_REPLAY__': fig('pm_replay'),
     }
